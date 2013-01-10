@@ -9,35 +9,32 @@ zapian: a schemaless wrap for xapian
 =============
 
 - 更友好的schemaless的api
-- 支持分区索引：更高的搜索性能
+- 支持分区索引：可单独指定分区搜索，或合并搜索
 
-字段类型的处理
-=================
-- 字符串：全文索引
-- 列表：完整匹配
-- 整数、时间、小数：用于排序和条件判断
+  - 历史数据存放在不同的索引分区
+  - 根据数据存放区域进行分区
 
 Schemaless API
 ====================
-虽然schemaless，但是还是需要设置：1) PREFIX和字段的映射：2) SLOT
-
-      schema = {"prefix":{'title':"NC", 'created':"LL"}, 
-                "slots":['modified', 'created']
-               }
-
 首先需要初始化数据库:
 
-      db = get_zapian_db(root='/tmp/test_zapian_db', schema)
+      db = get_zapian_db(root='/tmp/test_zapian_db')
+
+添加一个分区：
+
+      db.add_part('2001-02')
+      db.list_parts()
 
 添加索引:
 
       db.add_document(part='default', 
                       uid='1111', 
-                      doc={ 'title' : '我们很好.doc', 
-		            'searchable_text' : '', 
-                            'modified' : datetime.datetime(), 
-                            'crated' : datetime.datetime()
-                            },
+                      doc = { '*title' : '我们很好.doc', 
+		             'searchable_text' : '', 
+                             'modified' : datetime.datetime(), 
+                             'crated' : datetime.datetime()
+                           },
+		      data = {},  # json
                      )
 
 修改索引:
@@ -48,13 +45,30 @@ Schemaless API
 
       db.delete_document(part, uid)
 
-分区搜索
-================
+doc和索引的关系
+=======================
+系统自动对数据类型进行处理：
 
-- 归档数据和当前数据存放在不同的分区
-- 不同区域的索引，分别存放
-- 可合并搜索
+- set/list/tuple：对每个包含数据，完整匹配搜索
+- datetime/int/float: 用于排序和范围比较
+- string/unicode: 
 
+  - 用于全文搜索
+  - 特殊：如果字段名以 * 开头，也会用于排序
+
+数据库的结构
+===================
+每个数据库内部有个schema.json, 有系统自动维护, 记录了3个信息：
+
+1) PREFIX和字段的映射： title':"NC", 'created':"LL"
+2) SLOT: ['modified', 'created']
+3) part: 20120112  最新分区
+
+文件夹结构：
+
+          schema.json
+          20120112/
+          20120512/
 
 搜索
 ==========
