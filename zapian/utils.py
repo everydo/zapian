@@ -6,11 +6,7 @@
 from catalog import get_catalog
 from time import mktime
 from types import StringTypes
-from zopen.utils.cjksplitter import CJKSplitter
-from zope.component import getUtility
-from zope.app.intid.interfaces import IIntIds
-from zopen.security.interfaces import IGrantManager
-
+from cjksplitter import CJKSplitter
 
 def process_doc(catalog_name, raw_doc):
     """ 将原始的doc，根据catalog信息，转换为内部的doc形式，用于存放到队列
@@ -30,7 +26,7 @@ def process_doc(catalog_name, raw_doc):
     catalog = get_catalog(catalog_name)
     for field, value in raw_doc.iteritems():
 
-        value = clean_value(field, value)
+        value = CLEANERS[type(value)](value, False)
 
         # 一个field 可能同时有3种角色
         if field in catalog.fields:
@@ -52,15 +48,6 @@ def process_doc(catalog_name, raw_doc):
             field_data.append( value )
 
     return internal_doc
-
-def clean_value(field, value):
-    new_value = clean_field(field, value)
-
-    # 将数字转换为字符串
-    if type(new_value) in (long, int, float):
-        new_value = str(new_value)
-
-    return new_value
 
 def datetimeNorm(value, is_query=False):
     value = int(mktime(value.timetuple()))
@@ -129,41 +116,12 @@ def clean_path(objs, is_query):
     return " ".join([ str(id) for id in value ])
 
 # 这个字段指定了所要特殊处理格式的的字段和处理函数
-# clean 函数返回值必须是能够直接保存在xapian中的值（字符串）
-keyword_clean = {
-    'title':                  lambda v, is_query=False: clean_splitter(v, is_query),
-    'searchable_text':        lambda v, is_query=False: clean_splitter(v, is_query),
-    'file_content':           lambda v, is_query=False: clean_splitter(v, is_query),
-    'start':                  lambda v, is_query=False: clean_date(v, is_query),
-    'end':                    lambda v, is_query=False: clean_date(v, is_query),
-    'created':                lambda v, is_query=False: clean_date(v, is_query),
-    'modified':               lambda v, is_query=False: clean_date(v, is_query),
-    'expires':                lambda v, is_query=False: clean_date(v, is_query),
-    'effective':              lambda v, is_query=False: clean_date(v, is_query),
-    'subjects':               lambda v, is_query=False: clean_list(v, is_query),
-
-    'path':                   lambda v, is_query=False: clean_path(v, is_query),
-    'parent':                 lambda v, is_query=False: clean_parent(v, is_query),
-
-    'stati':                  lambda v, is_query=False: clean_list(v, is_query),
-    'creators':               lambda v, is_query=False: clean_list(v, is_query),
-    'responsibles':           lambda v, is_query=False: clean_list(v, is_query),
-    'contributors':           lambda v, is_query=False: clean_list(v, is_query),
-    'object_provides':        lambda v, is_query=False: clean_list(v, is_query),
-    'reviewer':               lambda v, is_query=False: clean_list(v, is_query),
-    'allowed_principals':     lambda v, is_query=False: clean_list(v, is_query),
-    'disallowed_principals':  lambda v, is_query=False: clean_list(v, is_query),
+CLEANERS = {
+    unicode:                  clean_splitter,
+    str:                      clean_splitter,
+    datetime:                 clean_date,
+    date:                     clean_date,
+    list:                     clean_list,
+    set:                      clean_list,
 }
-
-
-def clean_field(field, value, is_query=False):
-    """ """
-    clean = keyword_clean.get(field, None)
-    if clean:
-        return clean(value, is_query)
-    else:
-        if type(value) in (tuple, list, set):
-            if type(value[0]) == str:
-                return " ".join(value)
-    return value
 

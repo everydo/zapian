@@ -25,7 +25,6 @@ import xapian
 import json
 import cPickle as pickle
 from catalog import get_catalog
-from ztq_core.async import async
 
 #DATA_ROOT = ''  # xapian的根文件夹路径
 DATA_ROOT = '/home/xtz/hg/edo/var/test_database'  # xapian的根文件夹路径
@@ -56,7 +55,6 @@ def remove_part(site_name, catalog_name, part_name):
     else:
         raise Exception('remove database: %s is not xapian database'%base_name)
 
-@async
 def add_document(site_name, catalog_name, part_name, uid, internal_doc, flush=True):
     """ 增加一个索引 """
     db = _get_write_db(site_name, catalog_name, part_name)
@@ -66,7 +64,6 @@ def add_document(site_name, catalog_name, part_name, uid, internal_doc, flush=Tr
     db.replace_document(identifier, doc)
     if flush: db.commit()
 
-@async
 def replace_document(site_name, catalog_name, part_name,  uid, internal_doc, flush=True):
     """ 重建文档索引 """
     db = _get_write_db(site_name, catalog_name, part_name)
@@ -76,7 +73,6 @@ def replace_document(site_name, catalog_name, part_name,  uid, internal_doc, flu
     db.replace_document(identifier, doc)
     if flush: db.commit()
 
-@async
 def delete_document(site_name, catalog_name, part_name, uids, flush=True):
     """ 删除一个文档 """
     if not isinstance(uids, (list, tuple, set)):
@@ -88,7 +84,6 @@ def delete_document(site_name, catalog_name, part_name, uids, flush=True):
 
     if flush: db.commit()
 
-#@async
 def update_document(site_name, catalog_name, part_name, uid, internal_doc, flush=True):
     """ 更改文档某个字段的索引
 
@@ -103,7 +98,6 @@ def update_document(site_name, catalog_name, part_name, uid, internal_doc, flush
     db.replace_document(identifier, new_doc)
     if flush: db.commit()
 
-@async
 def commit(site_name, catalog_name, part_name):
     """ 对外的接口 """
     db = _get_write_db(site_name, catalog_name, part_name)
@@ -401,7 +395,6 @@ def string2query(query_str, database, catalog_name):
             _queries = []
             for f in field:
                 prefix = catalog.fields[f]['prefix']
-                #new_value = utils.clean_field(f, value, is_query=True)
                 new_value = value
                 # 搜索支持部分匹配
 
@@ -412,8 +405,6 @@ def string2query(query_str, database, catalog_name):
             queries.append(query)
             continue
 
-        #value = utils.clean_field(field, value, is_query=True)
-            
         if not value:
             continue
 
