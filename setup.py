@@ -1,0 +1,37 @@
+################################
+import os
+from setuptools import setup, find_packages
+
+def read(*rnames):
+    return open(os.path.join(os.path.dirname(__file__), *rnames)).read()
+
+setup (
+    name='zapian',
+    version='0.1.1dev',
+    author = "Pan Junyong",
+    author_email = "dev@zopen.cn",
+    description = "indexer addons: sort, cjksplitter, and so on",
+    long_description=(
+        read('readme.md')
+        ),
+    license = "Private",
+    keywords = "zope3 z3c rpc  server client",
+    classifiers = [
+        'Development Status :: 4 - Alpha',
+        'Environment :: Web Environment',
+        'Intended Audience :: Developers',
+        'Programming Language :: Python',
+        'Natural Language :: Chinese',
+        'Operating System :: OS Independent',
+        'Topic :: Internet :: WWW/HTTP',
+        'Framework :: Zope3'],
+    url = 'http://epk.zopen.cn/pypi/zapian',
+    packages = find_packages(),
+    include_package_data = True,
+    namespace_packages= [],
+    install_requires = [
+        'setuptools',
+        'xapian',
+        ],
+    zip_safe = False,
+)
