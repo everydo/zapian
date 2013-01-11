@@ -66,17 +66,34 @@ class Zapian:
         """ 增加一个索引
         doc : {'title':'asdfa asdfa asdf', 'tags':['asdf','asdfa','asdf'], 'created':12312.23}
         """
-        IR.add_document(site_name, catalog_name, part_name, uid,
-                process_doc(catalog_name, doc), flush, **kw)
+        internal_doc = process_doc(catalog_name, doc)
+	db = _get_write_db(site_name, catalog_name, part_name)
+    	identifier = u'Q' + str(uid)
+    	doc = _prepare_doc(internal_doc, catalog_name)
+    	doc.add_boolean_term(identifier)
+    	db.replace_document(identifier, doc)
+    	if flush: db.commit()
     
     def replace_document(part_name, uid, index, data=None, flush=True, **kw):
         """ 重建文档索引 """
-        IR.replace_document(site_name, catalog_name, part_name, uid,
-                process_doc(catalog_name, doc), flush, **kw)
+        internal_doc = process_doc(catalog_name, doc)
+    	db = _get_write_db(site_name, catalog_name, part_name)
+    	identifier = u'Q' + str(uid)
+    	doc = _prepare_doc(internal_doc, catalog_name)
+    	doc.add_boolean_term(identifier)
+    	db.replace_document(identifier, doc)
+    	if flush: db.commit()
     
     def delete_document(part_name, uids, flush=True, **kw):
         """ 删除一个文档 """
-        IR.delete_document(site_name, catalog_name, part_name, uids, flush, **kw)
+    	if not isinstance(uids, (list, tuple, set)):
+            uids = (uids,)
+    	db = _get_write_db(site_name, catalog_name, part_name)
+    	for uid in uids:
+            identifier = u'Q' + str(uid)
+            db.delete_document(identifier)
+
+        if flush: db.commit()
     
     def remove_part(part_name):
         """ 删除一个分区 """
@@ -92,83 +109,81 @@ class Zapian:
         """ 更改文档某个字段的索引
         注意，xapian不支持，这里手工处理 """
     
-        IR.update_document(site_name, catalog_name, part_name, uid, 
-                process_doc(catalog_name, doc), flush, **kw)
+        internal_doc = process_doc(catalog_name, doc)
+    	db = _get_write_db(site_name, catalog_name, part_name)
+	identifier = u'Q' + str(uid)
+	doc = _get_document(db, str(uid))
+	
+	new_doc = _prepare_doc(internal_doc, catalog_name, doc)
+	
+	db.replace_document(identifier, new_doc)
+	if flush: db.commit()
 
-    def flush(part_name, **kw):
-        """ """
-        IR.commit(site_name, catalog_name, part_name, **kw)
-    
+    def commit(part_name):
+	""" 对外的接口 """
+    	db = _get_write_db(site_name, catalog_name, part_name)
+    	db.commit()
+
     # 搜索
-    def search(parts, query_json):
-        """ 搜索查询结果 """
-        # 如果没有指定数据库位置，就搜索这个catalog下所有的数据库
-    
-        orderby = query_set._order_by
-        start = query_set._start
-        stop = 0
-        if query_set._limit and query_set._limit < 100000:
-            stop =  start + query_set._limit
-        else:
-            # 取出数据太大，会导致内存分配错误
-            stop = start + 100000
-    
-        return IR.search(site_name = site_name,
-                        catalog_name = catalog_name, 
-                        parts = parts, 
-                        query_str = query_set.json(),
-                        orderby = orderby,
-                        start = start,
-                        stop = stop,)
+    def search(parts, query_str, orderby=None, start=0, stop=0):
+        """ 搜索, 返回document id的集合 
+
+       如果parts为空，会对此catalog的所有索引进行搜索。
+       """
+	# 要搜索的数据库位置，允许联合查询
+	database = _get_read_db(site_name, catalog_name, parts)
+	
+	query = string2query(query_str, database, catalog_name)
+	logger.debug("Parsed query is: %s" % str(query))
+	
+	enquire = xapian.Enquire(database)
+	enquire.set_query(query)
+	
+	# sort
+	if orderby is not None:
+	asc = True
+	if orderby[0] == '-':
+	    asc = False
+	    orderby = orderby[1:]
+	elif orderby[0] == '+':
+	    orderby = orderby[1:]
+	
+	catalog = get_catalog(catalog_name)
+	try:
+	    slotnum = catalog.attributes[orderby]['slot']
+	except KeyError:
+	    raise Exception("Field %r was not indexed for sorting" % orderby)
+	
+	# Note: we invert the "asc" parameter, because xapian treats
+	# "ascending" as meaning "higher values are better"; in other
+	# words, it considers "ascending" to mean return results in
+	# descending order.
+	enquire.set_sort_by_value_then_relevance(slotnum, not asc)
+	
+	enquire.set_docid_order(enquire.DONT_CARE)
+	
+	# Repeat the search until we don't get a DatabaseModifiedError
+	while True:
+	try:
+	    matches = enquire.get_mset(start, stop)
+	    break
+	except xapian.DatabaseModifiedError:
+	    database.reopen()
+	
+	# 返回结果的ID集
+	def _get_docid(match):
+	tl = match.document.termlist()
+	try:
+	    term = tl.skip_to('Q').term
+	    if len(term) == 0 or term[0] != 'Q':
+	        return None
+	except StopIteration:
+	    return None
+	return term[1:]
+	
+	return map(lambda match: _get_docid(match), matches)
 
 
-def add_document(db_path, part_name, uid, internal_doc, flush=True):
-    """ 增加一个索引 """
-    db = _get_write_db(site_name, catalog_name, part_name)
-    identifier = u'Q' + str(uid)
-    doc = _prepare_doc(internal_doc, catalog_name)
-    doc.add_boolean_term(identifier)
-    db.replace_document(identifier, doc)
-    if flush: db.commit()
-
-def replace_document(db_path, part_name,  uid, internal_doc, flush=True):
-    """ 重建文档索引 """
-    db = _get_write_db(site_name, catalog_name, part_name)
-    identifier = u'Q' + str(uid)
-    doc = _prepare_doc(internal_doc, catalog_name)
-    doc.add_boolean_term(identifier)
-    db.replace_document(identifier, doc)
-    if flush: db.commit()
-
-def delete_document(db_path, part_name, uids, flush=True):
-    """ 删除一个文档 """
-    if not isinstance(uids, (list, tuple, set)):
-        uids = (uids,)
-    db = _get_write_db(site_name, catalog_name, part_name)
-    for uid in uids:
-        identifier = u'Q' + str(uid)
-        db.delete_document(identifier)
-
-    if flush: db.commit()
-
-def update_document(db_path, part_name, uid, internal_doc, flush=True):
-    """ 更改文档某个字段的索引
-
-    注意，xapian不支持，这里手工处理 """
-
-    db = _get_write_db(site_name, catalog_name, part_name)
-    identifier = u'Q' + str(uid)
-    doc = _get_document(db, str(uid))
-
-    new_doc = _prepare_doc(internal_doc, catalog_name, doc)
-
-    db.replace_document(identifier, new_doc)
-    if flush: db.commit()
-
-def commit(db_path, part_name):
-    """ 对外的接口 """
-    db = _get_write_db(site_name, catalog_name, part_name)
-    db.commit()
 
 def _get_document(db, uid):
     """Get the document with the specified unique ID.
@@ -499,61 +514,4 @@ def string2query(db_path, query_str, database):
 
     return combined
 
-def search(db_path, parts, query_str, orderby=None, start=0, stop=0):
-    """ 搜索, 返回document id的集合 
-
-    如果parts为空，会对此catalog的所有索引进行搜索。
-    """
-    # 要搜索的数据库位置，允许联合查询
-    database = _get_read_db(site_name, catalog_name, parts)
-
-    query = string2query(query_str, database, catalog_name)
-    logger.debug("Parsed query is: %s" % str(query))
-
-    enquire = xapian.Enquire(database)
-    enquire.set_query(query)
-
-    # sort
-    if orderby is not None:
-        asc = True
-        if orderby[0] == '-':
-            asc = False
-            orderby = orderby[1:]
-        elif orderby[0] == '+':
-            orderby = orderby[1:]
-
-        catalog = get_catalog(catalog_name)
-        try:
-            slotnum = catalog.attributes[orderby]['slot']
-        except KeyError:
-            raise Exception("Field %r was not indexed for sorting" % orderby)
-
-        # Note: we invert the "asc" parameter, because xapian treats
-        # "ascending" as meaning "higher values are better"; in other
-        # words, it considers "ascending" to mean return results in
-        # descending order.
-        enquire.set_sort_by_value_then_relevance(slotnum, not asc)
-
-    enquire.set_docid_order(enquire.DONT_CARE)
-
-    # Repeat the search until we don't get a DatabaseModifiedError
-    while True:
-        try:
-            matches = enquire.get_mset(start, stop)
-            break
-        except xapian.DatabaseModifiedError:
-            database.reopen()
-
-    # 返回结果的ID集
-    def _get_docid(match):
-        tl = match.document.termlist()
-        try:
-            term = tl.skip_to('Q').term
-            if len(term) == 0 or term[0] != 'Q':
-                return None
-        except StopIteration:
-            return None
-        return term[1:]
-
-    return map(lambda match: _get_docid(match), matches)
 
