@@ -1,23 +1,8 @@
 # -*- encoding: utf-8 -*-
-""" xapian的"分布式"索引引擎
+""" xapian的索引引擎
 
-对 internal_doc 进行索引，这个可以放到队列里面在另外的服务器运行 
-
-xapian数据库文件的存放路径::
-
-  DATA_ROOT/
-     |
-     |-- site_name/
-     |     |
-     |     |-- catalog_name/
-     |     |     |
-     |     |     |-- part_name/
-
-问题：
-
-1. 各个site的分区信息维护
-2. 删除一个分区
-
+1. 根据catalog字段自动分区
+2. 理解document的层次关系根据path来判断)
 """
 
 import os
@@ -25,10 +10,9 @@ import shutil
 import xapian
 import json
 import cPickle as pickle
-from catalog import get_catalog
-
-#DATA_ROOT = ''  # xapian的根文件夹路径
-DATA_ROOT = '/home/xtz/hg/edo/var/test_database'  # xapian的根文件夹路径
+from utils import process_doc
+import logging
+logger = logging.getLogger("zapian")
 
 _qp_flags_base = xapian.QueryParser.FLAG_LOVEHATE
 _qp_flags_phrase = xapian.QueryParser.FLAG_PHRASE
@@ -36,25 +20,107 @@ _qp_flags_synonym = (xapian.QueryParser.FLAG_AUTO_SYNONYMS |
                      xapian.QueryParser.FLAG_AUTO_MULTIWORD_SYNONYMS)
 _qp_flags_bool = xapian.QueryParser.FLAG_BOOLEAN
 
-import logging
-logger = logging.getLogger("zapian")
 
 def init_xapian(data_root, **kw):
     global DATA_ROOT
     DATA_ROOT = data_root
 
-def remove_part(db_path, part_name):
-    """ 删除一个分区
-    """
-    if not part_name:
-        raise Exception('part_name is emply')
+class Schema(object):
+    """ 索引目录, 支持字段
 
-    base_name = os.path.join(DATA_ROOT, site_name, catalog_name, part_name)
-    if os.path.isdir(base_name):
-        shutil.rmtree(base_name)
-        _write_database_index.pop(base_name, None)
-    else:
-        raise Exception('remove database: %s is not xapian database'%base_name)
+    暂不支持分区的自定义，只能根据path字段分区
+    """
+    name = ''
+
+    fields = {}       # full-text search 字段 term
+                      # {'title':{'prefix’:’NS’, ‘type’:’text|exact|multi’} }
+
+    attributes = {}   # 属性 value
+                      # {'created':{'slot':1, 'type':’int|float|timestamp|string’}, }
+
+
+    def __init__(self, db_path):
+	self.db_path = db_path
+	self.load()
+
+    def get_prefix(self, name, auto_add=True):
+	pass
+
+    def get_slot(self, name, auto_add=True):
+	pass
+
+    def load(self):
+        pass
+
+    def add_field(self, name):
+        pass
+
+    def add_attribute(self, name):
+        pass
+
+class Zapian:
+    def __init__(self, db_path):
+        self.db_path = db_path
+        
+    def add_document(part_name, uid, index, data=None, flush=True, **kw):
+        """ 增加一个索引
+        doc : {'title':'asdfa asdfa asdf', 'tags':['asdf','asdfa','asdf'], 'created':12312.23}
+        """
+        IR.add_document(site_name, catalog_name, part_name, uid,
+                process_doc(catalog_name, doc), flush, **kw)
+    
+    def replace_document(part_name, uid, index, data=None, flush=True, **kw):
+        """ 重建文档索引 """
+        IR.replace_document(site_name, catalog_name, part_name, uid,
+                process_doc(catalog_name, doc), flush, **kw)
+    
+    def delete_document(part_name, uids, flush=True, **kw):
+        """ 删除一个文档 """
+        IR.delete_document(site_name, catalog_name, part_name, uids, flush, **kw)
+    
+    def remove_part(part_name):
+        """ 删除一个分区 """
+    
+        base_name = os.path.join(DATA_ROOT, site_name, catalog_name, part_name)
+        if os.path.isdir(base_name):
+            shutil.rmtree(base_name)
+            _write_database_index.pop(base_name, None)
+        else:
+            raise Exception('remove database: %s is not xapian database'%base_name)
+    
+    def update_document(part_name, uid, index, data=None, flush=True, **kw):
+        """ 更改文档某个字段的索引
+        注意，xapian不支持，这里手工处理 """
+    
+        IR.update_document(site_name, catalog_name, part_name, uid, 
+                process_doc(catalog_name, doc), flush, **kw)
+
+    def flush(part_name, **kw):
+        """ """
+        IR.commit(site_name, catalog_name, part_name, **kw)
+    
+    # 搜索
+    def search(parts, query_json):
+        """ 搜索查询结果 """
+        # 如果没有指定数据库位置，就搜索这个catalog下所有的数据库
+    
+        orderby = query_set._order_by
+        start = query_set._start
+        stop = 0
+        if query_set._limit and query_set._limit < 100000:
+            stop =  start + query_set._limit
+        else:
+            # 取出数据太大，会导致内存分配错误
+            stop = start + 100000
+    
+        return IR.search(site_name = site_name,
+                        catalog_name = catalog_name, 
+                        parts = parts, 
+                        query_str = query_set.json(),
+                        orderby = orderby,
+                        start = start,
+                        stop = stop,)
+
 
 def add_document(db_path, part_name, uid, internal_doc, flush=True):
     """ 增加一个索引 """
@@ -490,42 +556,4 @@ def search(db_path, parts, query_str, orderby=None, start=0, stop=0):
         return term[1:]
 
     return map(lambda match: _get_docid(match), matches)
-
-class Catalog(object):
-    """ 索引目录, 支持字段
-
-    暂不支持分区的自定义，只能根据path字段分区
-    """
-    name = ''
-
-    fields = {}       # full-text search 字段 term
-                      # {'title':{'prefix’:’NS’, ‘type’:’text|exact|multi’} }
-
-    attributes = {}   # 属性 value
-                      # {'created':{'slot':1, 'type':’int|float|timestamp|string’}, }
-
-    data = {}         # 需要返回的东西
-
-    def __init__(self, name=None, fields=None, attributes=None, data=None, **argv):
-        if name:
-            self.name = name
-        if fields:
-            self.fields = fields
-        if attributes:
-            self.attributes = attributes
-        if data:
-            self.data = data
-
-        for key, value in argv.items():
-            setattr(self, key, value)
-
-_catalog_registry = {}
-
-def register_catalog(catalog):
-    """ 注册catalog """
-    _catalog_registry[catalog.name] = catalog
-
-def get_catalog(name):
-    """ 得到一个catalog """
-    return _catalog_registry[name]
 
