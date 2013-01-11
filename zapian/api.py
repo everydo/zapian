@@ -31,7 +31,7 @@ class Zapian:
         doc : {'title':'asdfa asdfa asdf', 'tags':['asdf','asdfa','asdf'], 'created':12312.23}
         """
         internal_doc = process_doc(catalog_name, doc)
-	db = _get_write_db(site_name, catalog_name, part_name)
+        db = _get_write_db(site_name, catalog_name, part_name)
     	identifier = u'Q' + str(uid)
     	doc = _prepare_doc(internal_doc, catalog_name)
     	doc.add_boolean_term(identifier)
@@ -105,7 +105,7 @@ class Zapian:
 	
 	# sort
 	if orderby is not None:
-	asc = True
+        asc = True
 	if orderby[0] == '-':
 	    asc = False
 	    orderby = orderby[1:]

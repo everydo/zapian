@@ -3,26 +3,18 @@
 import os
 import sys
 import shutil
+import tempfile
 import unittest
 import logging
 from datetime import datetime
 
-# FIXME hack async function in ztq_core.async 
-# we are not was the async function.
-def hack_async(*_args, **_kw):
-    func = _args[0]
-    def _(*args, **kw):
-        func(*args, **kw)
-    return _
-from ztq_core import async
-async.async = hack_async
+#from zapian import (
+#                    catalog, 
+#                    queryset,
+#                    engine,
+#                    xapian_driver)
 
-from zopen.indexer import catalog as catalog_instance
-from zapian import (
-                            catalog, 
-                            queryset,
-                            engine,
-                            xapian_driver)
+from schema import Schema
 
 def initlog(level_name='INFO'):
     """ """
@@ -35,21 +27,20 @@ def initlog(level_name='INFO'):
     logger.setLevel(logging.getLevelName(level_name))
     return logger
     
-class XapianTest(unittest.TestCase):
+class ZapianTest(unittest.TestCase):
 
     def setUp(self):
         # init the database attributes
-        catalog.register_catalog(catalog_instance.SimpleCatalog(name='simple'))
-        catalog.register_catalog(catalog_instance.FullCatalog(name='full'))
-        self.data_root = '/tmp'
-        xapian_driver.init_xapian(self.data_root)
-        self.site_name = 'zopen'
-        self.catalog_name = 'full'
+        self.data_root = os.path.join(tempfile.mkdtemp(), 'test_zapian')
         self.parts = ['part01', 'part02']
 
         # init the database environ
+        if not os.path.exists(self.data_root):
+            print 'create %s database' % self.data_root
+            os.makedirs(self.data_root)
+
         for part_name in self.parts:
-            database_path = os.path.join(self.data_root, self.site_name, self.catalog_name, part_name)
+            database_path = os.path.join(self.data_root, part_name)
             if not os.path.isdir(database_path):
                 os.makedirs(database_path)
 
@@ -58,12 +49,12 @@ class XapianTest(unittest.TestCase):
                     'subjects':['file','ktv','what'], 
                     'created':datetime.now()}
 
-        engine.add_document(site_name     = self.site_name,
-                            catalog_name  = self.catalog_name,
-                            part_name     = self.parts[0],
-                            uid           = 123456, 
-                            doc           = self.doc
-                            )
+        #engine.add_document(site_name     = self.site_name,
+        #                    catalog_name  = self.catalog_name,
+        #                    part_name     = self.parts[0],
+        #                    uid           = 123456, 
+        #                    doc           = self.doc
+        #                    )
 
     def _tearDown(self):
         """ """
@@ -72,7 +63,22 @@ class XapianTest(unittest.TestCase):
             if os.path.isdir(database_path):
                 shutil.rmtree(database_path)
 
-    def test_remove_database(self):
+    def test_schema(self):
+        schema = Schema(self.data_root)
+        for part in self.parts:
+            schema.add_part(part)
+        # test gen prefix and slot
+        prefix = schema._gen_prefix() 
+        self.assertTrue(prefix == 'XA')
+        slot = schema._gen_slot()
+        self.assertTrue(slot == 0)
+        # test add field and attribute
+        schema.add_field('new_field')
+        self.assertTrue(schema.get_prefix('new_field') == prefix)
+        schema.add_attribute('new_attribute')
+        self.assertTrue(schema.get_slot('new_attribute') == slot)
+
+    def atest_remove_database(self):
         """ 测试删除数据库接口
         """
         engine.remove_part(self.site_name, self.catalog_name, self.parts[0])
@@ -82,7 +88,7 @@ class XapianTest(unittest.TestCase):
             database_path = os.path.join(self.data_root, self.site_name, self.catalog_name, part_name)
             self.assertTrue(os.path.exists(database_path))
 
-    def test_delete_document(self):
+    def atest_delete_document(self):
         """ 测试删除一个记录
         """
         engine.delete_document(site_name = self.site_name,
@@ -91,7 +97,7 @@ class XapianTest(unittest.TestCase):
                                 uid = '123456',)
         self.assertRaises(AssertionError, self.test_search_for_one_database)
 
-    def test_search_for_one_database(self, qs=None, search_uid='123456'):
+    def atest_search_for_one_database(self, qs=None, search_uid='123456'):
         """ 测试一个数据库搜索
         """
         if not qs:
@@ -105,7 +111,7 @@ class XapianTest(unittest.TestCase):
                                 )
         self.assertTrue(search_uid in result)
 
-    def test_search_for_multi_database(self):
+    def atest_search_for_multi_database(self):
         """ 测试多个个数据库联合搜索
         """
         engine.add_document(site_name     = self.site_name,
@@ -125,7 +131,7 @@ class XapianTest(unittest.TestCase):
         self.assertTrue('7890' in result)
         self.assertTrue('123456' in result)
 
-    def test_index_for_multi(self):
+    def atest_index_for_multi(self):
         """ 测试一个数据库连续写入
             同一路径写数据一次只能打开一个
         """
@@ -156,7 +162,7 @@ class XapianTest(unittest.TestCase):
         # 搜索不到, 会抛出assertion异常
         self.assertRaises(AssertionError, self.test_search_for_one_database, qs)
 
-    def test_replace_document(self):
+    def atest_replace_document(self):
         """ 测试重建文档索引
         """
         new_doc = {'title':'new doc',
@@ -174,7 +180,7 @@ class XapianTest(unittest.TestCase):
         # 原来的应该搜索不到了, 就会抛出assertion异常
         self.assertRaises(AssertionError, self.test_search_for_one_database)
 
-    def test_update_document(self):
+    def atest_update_document(self):
         """ 测试更改文档某个字段的索引
         """
         # 先正常搜索一次
@@ -193,7 +199,7 @@ if __name__ == '__main__':
     else:
         level_name = 'INFO'
 
-    logger = initlog(level_name)
+    #logger = initlog(level_name)
 
     unittest.main()
 
