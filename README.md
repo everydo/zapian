@@ -1,14 +1,16 @@
 zapian: schemaless python interface to Xapian
 ===============================================
 
-喜欢elasticsearch的api，但是憎恨Luence的java架构，憎恨开启新的服务进程？
+作为一个pythoner，我们有理由爱xapian... 
+
+但xappy已年久失修过于陈旧了... 喜欢elasticsearch的api，但是憎恨Luence的java架构，不愿引入新的服务进程？
 
 那么zapian，可能是你需要的....
 
 特性
 =============
 
-- 更友好的schemaless的api
+- 为xapian提供更友好的schemaless的api
 - 支持分区索引：可单独指定分区搜索，或合并搜索
 
   - 历史数据存放在不同的索引分区
