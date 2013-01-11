@@ -15,7 +15,6 @@ from utils import process_doc
 import logging
 logger = logging.getLogger('zapian')
 
-# 索引
 def add_document(site_name, catalog_name, part_name, uid, doc, flush=True, **kw):
     """ 增加一个索引
     doc : {'title':'asdfa asdfa asdf', 'tags':['asdf','asdfa','asdf'], 'created':12312.23}
@@ -69,4 +68,3 @@ def search(site_name, catalog_name, parts, query_set):
                     orderby = orderby,
                     start = start,
                     stop = stop,)
-
