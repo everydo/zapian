@@ -21,42 +21,6 @@ _qp_flags_synonym = (xapian.QueryParser.FLAG_AUTO_SYNONYMS |
 _qp_flags_bool = xapian.QueryParser.FLAG_BOOLEAN
 
 
-def init_xapian(data_root, **kw):
-    global DATA_ROOT
-    DATA_ROOT = data_root
-
-class Schema(object):
-    """ 索引目录, 支持字段
-
-    暂不支持分区的自定义，只能根据path字段分区
-    """
-    name = ''
-
-    fields = {}       # full-text search 字段 term
-                      # {'title':{'prefix’:’NS’, ‘type’:’text|exact|multi’} }
-
-    attributes = {}   # 属性 value
-                      # {'created':{'slot':1, 'type':’int|float|timestamp|string’}, }
-
-
-    def __init__(self, db_path):
-	self.db_path = db_path
-	self.load()
-
-    def get_prefix(self, name, auto_add=True):
-	pass
-
-    def get_slot(self, name, auto_add=True):
-	pass
-
-    def load(self):
-        pass
-
-    def add_field(self, name):
-        pass
-
-    def add_attribute(self, name):
-        pass
 
 class Zapian:
     def __init__(self, db_path):
