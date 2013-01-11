@@ -20,7 +20,7 @@ Schemaless API
 ====================
 首先需要初始化数据库:
 
-      db = Zapian(root='/tmp/test_zapian_db')
+      db = Zapian(path='/tmp/test_zapian_db')
 
 添加一个分区：
 
