@@ -29,13 +29,13 @@ Schemaless API
 
       db.add_document(part='default', 
                       uid='1111', 
-                      doc = { '*title' : '我们很好.doc', 
-		             'searchable_text' : '', 
-                             'modified' : datetime.datetime(), 
-                             'crated' : datetime.datetime()
-                           },
-		      data = {},  # json
-                     )
+                      index = { '+title' : u'我们很好.doc', 
+		                'searchable_text' : u'', 
+                                'modified' : datetime.datetime(), 
+                                'crated' : datetime.datetime()
+                            },
+                       data = {}
+                      )
 
 修改索引:
 
@@ -47,14 +47,12 @@ Schemaless API
 
 doc和索引的关系
 =======================
-系统自动对数据类型进行处理：
+xapian内部对数据有三种用途：term索引、排序字段、返回data；系统自动对数据类型进行处理：
 
-- set/list/tuple：对每个包含数据，完整匹配搜索
-- datetime/int/float: 用于排序和范围比较
-- string/unicode: 
-
-  - 用于全文搜索
-  - 特殊：如果字段名以 * 开头，也会用于排序
+- set/list/tuple：对每个包含数据，完整匹配搜索(term索引)
+- string/unicode: 用于全文搜索(term索引)
+- datetime/int/float: 用于排序和范围比较(排序字段)
+- 如果字符串类型的字段以 + 开头，表示除了全文索引，也会用于排序
 
 数据库的结构
 ===================
