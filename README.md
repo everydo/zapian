@@ -74,15 +74,18 @@ xapian内部对数据有三种用途：term索引、排序字段、返回data；
 
 数据库的结构
 ===================
-每个数据库内部有个schema.json, 有系统自动维护, 记录了3个信息：
+数据库存放在文件夹结构：
 
-1. PREFIX和字段的映射： title':"NC", 'created':"LL"
-2. SLOT: ['modified', 'created']
-3. part: 20120112  最新分区
+          schema.json   # 库结构信息
+          20120112/     # 某个分区，标准xapian数据库
+          20120512/     # 另外一个分区，标准xapian数据库
 
-文件夹结构：
+其中schema.json, 由系统自动维护, 记录了2个信息：
 
-          schema.json
-          20120112/
-          20120512/
+1. PREFIX和字段的映射： 
 
+      prefixes:{title':"NC", 'created':"LL"}
+      
+2. attribute存放的slot位置: 
+
+      slots:{'modified':1, 'created':2}
