@@ -43,7 +43,7 @@ def init_xapian(data_root, **kw):
     global DATA_ROOT
     DATA_ROOT = data_root
 
-def remove_part(site_name, catalog_name, part_name):
+def remove_part(db_path, part_name):
     """ 删除一个分区
     """
     if not part_name:
@@ -56,7 +56,7 @@ def remove_part(site_name, catalog_name, part_name):
     else:
         raise Exception('remove database: %s is not xapian database'%base_name)
 
-def add_document(site_name, catalog_name, part_name, uid, internal_doc, flush=True):
+def add_document(db_path, part_name, uid, internal_doc, flush=True):
     """ 增加一个索引 """
     db = _get_write_db(site_name, catalog_name, part_name)
     identifier = u'Q' + str(uid)
@@ -65,7 +65,7 @@ def add_document(site_name, catalog_name, part_name, uid, internal_doc, flush=Tr
     db.replace_document(identifier, doc)
     if flush: db.commit()
 
-def replace_document(site_name, catalog_name, part_name,  uid, internal_doc, flush=True):
+def replace_document(db_path, part_name,  uid, internal_doc, flush=True):
     """ 重建文档索引 """
     db = _get_write_db(site_name, catalog_name, part_name)
     identifier = u'Q' + str(uid)
@@ -74,7 +74,7 @@ def replace_document(site_name, catalog_name, part_name,  uid, internal_doc, flu
     db.replace_document(identifier, doc)
     if flush: db.commit()
 
-def delete_document(site_name, catalog_name, part_name, uids, flush=True):
+def delete_document(db_path, part_name, uids, flush=True):
     """ 删除一个文档 """
     if not isinstance(uids, (list, tuple, set)):
         uids = (uids,)
@@ -85,7 +85,7 @@ def delete_document(site_name, catalog_name, part_name, uids, flush=True):
 
     if flush: db.commit()
 
-def update_document(site_name, catalog_name, part_name, uid, internal_doc, flush=True):
+def update_document(db_path, part_name, uid, internal_doc, flush=True):
     """ 更改文档某个字段的索引
 
     注意，xapian不支持，这里手工处理 """
@@ -99,7 +99,7 @@ def update_document(site_name, catalog_name, part_name, uid, internal_doc, flush
     db.replace_document(identifier, new_doc)
     if flush: db.commit()
 
-def commit(site_name, catalog_name, part_name):
+def commit(db_path, part_name):
     """ 对外的接口 """
     db = _get_write_db(site_name, catalog_name, part_name)
     db.commit()
@@ -128,7 +128,7 @@ def _get_document(db, uid):
     return db.get_document(plitem.docid)
 
 _write_database_index = {}
-def _get_write_db(site_name, catalog_name, part_name, protocol=''):
+def _get_write_db(db_path, part_name, protocol=''):
     """ 得到可写数据库连结 """
     # FIXME 支持tcp, ssh 协议
     base_name = os.path.join(DATA_ROOT, site_name, catalog_name, part_name)
@@ -141,7 +141,7 @@ def _get_write_db(site_name, catalog_name, part_name, protocol=''):
         _write_database_index[base_name] = db
         return db
 
-def _get_read_db(site_name, catalog_name, parts, protocol=''):
+def _get_read_db(db_path, parts, protocol=''):
     """ 得到只读数据库连结 """
     # FIXME 支持tcp, ssh 协议
     # 如果没有parts， 默认搜索整个catalog目录下的database
@@ -292,7 +292,7 @@ def _query_parse_with_fallback(qp, string, prefix=None):
 
     return xapian.Query(xapian.Query.OP_AND_MAYBE, q1, q2)
 
-def query_field(field, value, catalog_name, default_op=xapian.Query.OP_AND):
+def query_field(db_path, field, value, default_op=xapian.Query.OP_AND):
     """ """ 
     catalog = get_catalog(catalog_name)
 
@@ -336,7 +336,7 @@ def query_filter(query, filter, exclude=False):
     else:
         return xapian.Query(xapian.Query.OP_FILTER, query, filter)
 
-def query_range(field, catalog_name, begin, end):
+def query_range(db_path, field, begin, end):
     """ """
     if begin is None and end is None:
         # Return a "match everything" query
@@ -377,7 +377,7 @@ def normalize_range(value):
             return str(item)
     return [change_str(v) for v in value]
 
-def string2query(query_str, database, catalog_name):
+def string2query(db_path, query_str, database):
     """ 把json格式的query 转换为xapian 的query
     """
     qp = xapian.QueryParser()
@@ -433,7 +433,7 @@ def string2query(query_str, database, catalog_name):
 
     return combined
 
-def search(site_name, catalog_name, parts, query_str, orderby=None, start=0, stop=0):
+def search(db_path, parts, query_str, orderby=None, start=0, stop=0):
     """ 搜索, 返回document id的集合 
 
     如果parts为空，会对此catalog的所有索引进行搜索。
