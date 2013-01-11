@@ -1,4 +1,4 @@
-zapian: a schemaless wrap for xapian
+zapian: schemaless python interface to Xapian
 ===============================================
 
 喜欢elasticsearch的api，但是憎恨Luence的java架构，憎恨开启新的服务进程？
