@@ -74,9 +74,9 @@ xapian内部对数据有三种用途：term索引、排序字段、返回data；
 ===================
 每个数据库内部有个schema.json, 有系统自动维护, 记录了3个信息：
 
-1) PREFIX和字段的映射： title':"NC", 'created':"LL"
-2) SLOT: ['modified', 'created']
-3) part: 20120112  最新分区
+1. PREFIX和字段的映射： title':"NC", 'created':"LL"
+2. SLOT: ['modified', 'created']
+3. part: 20120112  最新分区
 
 文件夹结构：
 
