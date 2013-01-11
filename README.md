@@ -23,11 +23,10 @@ Schemaless API
 添加一个分区：
 
       db.add_part('2001-02')
-      db.list_parts()
 
 添加索引:
 
-      db.add_document(part='default', 
+      db.add_document(part='2001-02', 
                       uid='1111', 
                       index = { '+title' : u'我们很好.doc', 
 		                'searchable_text' : u'', 
@@ -59,6 +58,7 @@ Schemaless API
                                 "exclude": }
                            ]
                        ]
+                   )
 
 
 doc和索引的关系
