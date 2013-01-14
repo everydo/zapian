@@ -56,12 +56,10 @@ class ZapianTest(unittest.TestCase):
         #                    doc           = self.doc
         #                    )
 
-    def _tearDown(self):
+    def tearDown(self):
         """ """
-        for part_name in self.parts:
-            database_path = os.path.join(self.data_root, self.site_name, self.catalog_name, part_name)
-            if os.path.isdir(database_path):
-                shutil.rmtree(database_path)
+        if os.path.exists(self.data_root):
+            shutil.rmtree(self.data_root)
 
     def test_schema(self):
         schema = Schema(self.data_root)
@@ -73,10 +71,10 @@ class ZapianTest(unittest.TestCase):
         slot = schema._gen_slot()
         self.assertTrue(slot == 0)
         # test add field and attribute
-        schema.add_field('new_field')
-        self.assertTrue(schema.get_prefix('new_field') == prefix)
-        schema.add_attribute('new_attribute')
-        self.assertTrue(schema.get_slot('new_attribute') == slot)
+        new_prefix = schema.add_field('new_field')
+        self.assertTrue(schema.get_prefix('new_field') == new_prefix == prefix)
+        new_slot = schema.add_attribute('new_attribute')
+        self.assertTrue(schema.get_slot('new_attribute') == new_slot == slot)
 
     def atest_remove_database(self):
         """ 测试删除数据库接口
