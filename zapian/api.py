@@ -1,8 +1,5 @@
 # -*- encoding: utf-8 -*-
-""" xapian的索引引擎
-
-1. 根据catalog字段自动分区
-2. 理解document的层次关系根据path来判断)
+""" zapian api 
 """
 
 import os
@@ -10,9 +7,8 @@ import shutil
 import xapian
 import json
 import cPickle as pickle
-from utils import process_doc
-import logging
-logger = logging.getLogger("zapian")
+from utils import clean_value
+from schema import Schema
 
 _qp_flags_base = xapian.QueryParser.FLAG_LOVEHATE
 _qp_flags_phrase = xapian.QueryParser.FLAG_PHRASE
@@ -20,133 +16,230 @@ _qp_flags_synonym = (xapian.QueryParser.FLAG_AUTO_SYNONYMS |
                      xapian.QueryParser.FLAG_AUTO_MULTIWORD_SYNONYMS)
 _qp_flags_bool = xapian.QueryParser.FLAG_BOOLEAN
 
+class Zapian(Schema):
 
+    parts = []
 
-class Zapian:
     def __init__(self, db_path):
         self.db_path = db_path
-        
-    def add_document(part_name, uid, index, data=None, flush=True, **kw):
-        """ 增加一个索引
-        doc : {'title':'asdfa asdfa asdf', 'tags':['asdf','asdfa','asdf'], 'created':12312.23}
+        super(self.__class__, self).__init__(db_path)
+
+        for part_name in os.listdir(db_path):
+            self.add_part(part_name)
+
+    def add_part(self, part_name):
+        """ add xapian a database """
+        part_path = os.path.join(self.db_path, part_name)
+        if os.path.isdir(part_path):
+            self.parts.append(part_path)
+
+    def remove_part(self, part_name):
+        """ remove xapian a database """
+        part_path = os.path.join(self.db_path, part_name)
+        if os.path.isdir(part_path):
+            part = _write_database_index.pop(part_path, None)
+            part.close()
+            shutil.rmtree(part_path)
+        else:
+            raise Exception('remove database: %s is not xapian database'%part_path)
+
+    def get_interior_doc(self, doc, data=None, xap_doc=None):
+        """ convert python dict into xapian document object
+            doc: 
+               {field1:value1, 
+                field2:value2}
+
+            data: raw data for original object
+
+            return: xapian document object
         """
-        internal_doc = process_doc(catalog_name, doc)
-        db = _get_write_db(site_name, catalog_name, part_name)
-    	identifier = u'Q' + str(uid)
-    	doc = _prepare_doc(internal_doc, catalog_name)
-    	doc.add_boolean_term(identifier)
-    	db.replace_document(identifier, doc)
-    	if flush: db.commit()
-    
-    def replace_document(part_name, uid, index, data=None, flush=True, **kw):
-        """ 重建文档索引 """
-        internal_doc = process_doc(catalog_name, doc)
-    	db = _get_write_db(site_name, catalog_name, part_name)
-    	identifier = u'Q' + str(uid)
-    	doc = _prepare_doc(internal_doc, catalog_name)
-    	doc.add_boolean_term(identifier)
-    	db.replace_document(identifier, doc)
-    	if flush: db.commit()
-    
-    def delete_document(part_name, uids, flush=True, **kw):
-        """ 删除一个文档 """
-    	if not isinstance(uids, (list, tuple, set)):
+        document = xap_doc or xapian.Document()
+        termgen = xapian.TermGenerator()
+        termgen.set_document(document)
+
+        removed_prefix = set()
+        # new value will be replace old value
+        for field, value in doc.iteritems():
+            value = clean_value(value)
+            # sortable
+            if field in self.attributes:
+                slotnum = self.get_slot(field)
+                if isinstance(value, float):
+                    value = xapian.sortable_serialise(float(value))
+                    document.add_value(int(slotnum), value)
+                else:
+                    document.add_value(int(slotnum), str(value))
+
+            # field
+            if field in self.fields:
+                prefix = self.get_prefix(field)
+                types = 'freetext'
+
+                # 移除旧的term
+                if xap_doc and prefix not in removed_prefix:
+                    termlist = xap_doc.termlist()
+                    term = termlist.skip_to(prefix)
+                    while 1:
+                        if term.term.startswith(prefix):
+                        #if term.term[:2] == prefix:
+                            document.remove_term(term.term)
+                        else:
+                            break
+                        try:
+                            term = termlist.next()
+                        except StopIteration:
+                            break
+                removed_prefix.add(prefix)
+
+                if types == 'exact':
+                    if len(value) > 0:
+                        # We use the following check, rather than "isupper()" to ensure
+                        # that we match the check performed by the queryparser, regardless
+                        # of our locale.
+                        if ord(value[0]) >= ord('A') and ord(value[0]) <= ord('Z'):
+                            prefix = prefix + ':'
+
+                    # Note - xapian currently restricts term lengths to about 248
+                    # characters - except that zero bytes are encoded in two bytes, so
+                    # in practice a term of length 125 characters could be too long.
+                    # Xapian will give an error when commit() is called after such
+                    # documents have been added to the database.
+                    # As a simple workaround, we give an error here for terms over 220
+                    # characters, which will catch most occurrences of the error early.
+                    #
+                    # In future, it might be good to change to a hashing scheme in this
+                    # situation (or for terms over, say, 64 characters), where the
+                    # characters after position 64 are hashed (we obviously need to do this
+                    # hashing at search time, too).
+                    if len(prefix + value) > 220:
+                        raise Exception("Field %r is too long: maximum length "
+                                                   "220 - was %d (%r)" %
+                                                   (field, len(prefix + value),
+                                                    prefix + value))
+
+
+                    document.add_term(prefix + value, 1) # wdfinc default set 1
+
+                elif types == 'freetext':
+                    # no positions, weight default set 1
+                    termgen.index_text_without_positions(str(value), 1, prefix)
+                    termgen.increase_termpos(10)
+
+        # data
+        if data is not None:
+            if xap_doc:
+                old_data = pickle.loads(xap_doc.get_data())
+                old_data.update(data)
+                document.set_data(pickle.dumps(old_data))
+            else:
+                document.set_data(pickle.dumps(data))
+
+        return document
+
+    def add_document(self, part_name, uid, index, data=None, flush=True):
+        """ add a xapian document
+        """
+        doc = self.get_interior_doc(index, data=data)
+        identifier = u'Q' + str(uid)
+        db = _get_write_db(self.db_path, part_name)
+        doc.add_boolean_term(identifier)
+        db.replace_document(identifier, doc)
+        if flush: db.commit()
+
+    def replace_document(self, part_name, uid, index, data=None, flush=True):
+        """ replace existing xapian document """
+        doc = self.get_interior_doc(index, data=data)
+        db = _get_write_db(self.db_path, part_name)
+        identifier = u'Q' + str(uid)
+        doc.add_boolean_term(identifier)
+        db.replace_document(identifier, doc)
+        if flush: db.commit()
+
+    def delete_document(self, part_name, uids, flush=True):
+        """ delete a xapian document """
+        if not isinstance(uids, (list, tuple, set)):
             uids = (uids,)
-    	db = _get_write_db(site_name, catalog_name, part_name)
-    	for uid in uids:
+        db = _get_write_db(self.db_path, part_name)
+        for uid in uids:
             identifier = u'Q' + str(uid)
             db.delete_document(identifier)
-
         if flush: db.commit()
-    
-    def remove_part(part_name):
-        """ 删除一个分区 """
-    
-        base_name = os.path.join(DATA_ROOT, site_name, catalog_name, part_name)
-        if os.path.isdir(base_name):
-            shutil.rmtree(base_name)
-            _write_database_index.pop(base_name, None)
-        else:
-            raise Exception('remove database: %s is not xapian database'%base_name)
-    
-    def update_document(part_name, uid, index, data=None, flush=True, **kw):
-        """ 更改文档某个字段的索引
-        注意，xapian不支持，这里手工处理 """
-    
-        internal_doc = process_doc(catalog_name, doc)
-    	db = _get_write_db(site_name, catalog_name, part_name)
-	identifier = u'Q' + str(uid)
-	doc = _get_document(db, str(uid))
-	
-	new_doc = _prepare_doc(internal_doc, catalog_name, doc)
-	
-	db.replace_document(identifier, new_doc)
-	if flush: db.commit()
 
-    def commit(part_name):
-	""" 对外的接口 """
-    	db = _get_write_db(site_name, catalog_name, part_name)
+    def update_document(self, part_name, uid, index, data=None, flush=True):
+        """ update xapian document existing fields and attributes
+        """
+    	db = _get_write_db(self.db_path, part_name)
+
+        identifier = u'Q' + str(uid)
+        old_doc = _get_document(db, str(uid))
+
+        new_doc = self.get_interior_doc(index, data=data, xap_doc=old_doc)
+        
+        db.replace_document(identifier, new_doc)
+        if flush: db.commit()
+
+    def commit(self, part_name):
+        """ commit xapian database """
+    	db = _get_write_db(self.db_path, part_name)
     	db.commit()
 
-    # 搜索
     def search(parts, query_str, orderby=None, start=0, stop=0):
         """ 搜索, 返回document id的集合 
 
        如果parts为空，会对此catalog的所有索引进行搜索。
        """
-	# 要搜索的数据库位置，允许联合查询
-	database = _get_read_db(site_name, catalog_name, parts)
-	
-	query = string2query(query_str, database, catalog_name)
-	logger.debug("Parsed query is: %s" % str(query))
-	
-	enquire = xapian.Enquire(database)
-	enquire.set_query(query)
-	
-	# sort
-	if orderby is not None:
-        asc = True
-	if orderby[0] == '-':
-	    asc = False
-	    orderby = orderby[1:]
-	elif orderby[0] == '+':
-	    orderby = orderby[1:]
-	
-	catalog = get_catalog(catalog_name)
-	try:
-	    slotnum = catalog.attributes[orderby]['slot']
-	except KeyError:
-	    raise Exception("Field %r was not indexed for sorting" % orderby)
-	
-	# Note: we invert the "asc" parameter, because xapian treats
-	# "ascending" as meaning "higher values are better"; in other
-	# words, it considers "ascending" to mean return results in
-	# descending order.
-	enquire.set_sort_by_value_then_relevance(slotnum, not asc)
-	
-	enquire.set_docid_order(enquire.DONT_CARE)
-	
-	# Repeat the search until we don't get a DatabaseModifiedError
-	while True:
-	try:
-	    matches = enquire.get_mset(start, stop)
-	    break
-	except xapian.DatabaseModifiedError:
-	    database.reopen()
-	
-	# 返回结果的ID集
-	def _get_docid(match):
-	tl = match.document.termlist()
-	try:
-	    term = tl.skip_to('Q').term
-	    if len(term) == 0 or term[0] != 'Q':
-	        return None
-	except StopIteration:
-	    return None
-	return term[1:]
-	
-	return map(lambda match: _get_docid(match), matches)
+        # 要搜索的数据库位置，允许联合查询
+        database = _get_read_db(site_name, catalog_name, parts)
+        
+        query = string2query(query_str, database, catalog_name)
+        logger.debug("Parsed query is: %s" % str(query))
+        
+        enquire = xapian.Enquire(database)
+        enquire.set_query(query)
+        
+        # sort
+        if orderby is not None:
+            asc = True
+        if orderby[0] == '-':
+            asc = False
+            orderby = orderby[1:]
+        elif orderby[0] == '+':
+            orderby = orderby[1:]
 
+        catalog = get_catalog(catalog_name)
+        try:
+            slotnum = catalog.attributes[orderby]['slot']
+        except KeyError:
+            raise Exception("Field %r was not indexed for sorting" % orderby)
+
+        # Note: we invert the "asc" parameter, because xapian treats
+        # "ascending" as meaning "higher values are better"; in other
+        # words, it considers "ascending" to mean return results in
+        # descending order.
+        enquire.set_sort_by_value_then_relevance(slotnum, not asc)
+
+        enquire.set_docid_order(enquire.DONT_CARE)
+
+        # Repeat the search until we don't get a DatabaseModifiedError
+        while True:
+            try:
+                matches = enquire.get_mset(start, stop)
+                break
+            except xapian.DatabaseModifiedError:
+                database.reopen()
+
+            # 返回结果的ID集
+            def _get_docid(match):
+                tl = match.document.termlist()
+            try:
+                term = tl.skip_to('Q').term
+                if len(term) == 0 or term[0] != 'Q':
+                    return None
+            except StopIteration:
+                return None
+            return term[1:]
+
+        return map(lambda match: _get_docid(match), matches)
 
 
 def _get_document(db, uid):
@@ -174,128 +267,47 @@ def _get_document(db, uid):
 
 _write_database_index = {}
 def _get_write_db(db_path, part_name, protocol=''):
-    """ 得到可写数据库连结 """
-    # FIXME 支持tcp, ssh 协议
-    base_name = os.path.join(DATA_ROOT, site_name, catalog_name, part_name)
+    """ get xapian writable database 
+        protocol: the future may support.
+    """
+    part_path = os.path.join(db_path, part_name)
     # writeable database is already open, this will raise a xapian.DatabaseLockError
     # so, writeable database need to cached.
-    if base_name in _write_database_index:
-        return _write_database_index[base_name]
+    if part_path in _write_database_index:
+        return _write_database_index[part_path]
     else:
-        db = xapian.WritableDatabase(base_name, xapian.DB_CREATE_OR_OPEN)
-        _write_database_index[base_name] = db
+        db = xapian.WritableDatabase(part_path, xapian.DB_CREATE_OR_OPEN)
+        _write_database_index[part_path] = db
         return db
 
-def _get_read_db(db_path, parts, protocol=''):
-    """ 得到只读数据库连结 """
-    # FIXME 支持tcp, ssh 协议
+def _get_read_db(db_path, parts=None, protocol=''):
+    """ get xapian readonly database
+        protocol: the future may support.
+    """
     # 如果没有parts， 默认搜索整个catalog目录下的database
-    if not parts:
+    if parts is None:
         parts = []
-        catalog_dir = os.path.join(DATA_ROOT, site_name, catalog_name)
-        for part in os.listdir(catalog_dir):
+        for part in os.listdir(db_path):
             if os.path.isdir(part):
                 parts.append(part)
 
-    if not parts: parts = ''
+    if not parts:
+        raise IOError('%s is not validate datebase' % db_path)
 
-    if not isinstance(parts, (list, tuple, set)):
-        parts = (parts,)
+    if isinstance(parts, (list, tuple, set)):
+        base_name = os.path.join(db_path, parts.pop(0))
+        database = xapian.Database(base_name)
 
-    #if not parts:
-    #    error_name = os.path.join(DATA_ROOT, site_name, catalog_name)
-    #    raise Exception('Do not found the catalog: %s'%error_name)
-    
-    base_name = os.path.join(DATA_ROOT, site_name, catalog_name, parts[0])
-    database = xapian.Database(base_name)
+        # 适用于多个数据库查询
+        for part_name in parts:
+            other_name = os.path.join(db_path, part_name)
+        database.add_database(xapian.Database(other_name))
 
-    # 适用于多个数据库查询
-    if len(parts) > 1:
-        for part_name in parts[1:]:
-            other_name = os.path.join(DATA_ROOT, site_name, catalog_name, part_name)
-            database.add_database(xapian.Database(other_name))
-    return database
-
-def _prepare_doc(internal_doc, catalog_name, xap_doc=None):
-    """ 转换internal到xapian的doc 
-    """
-
-    doc = xap_doc or xapian.Document()
-    termgen = xapian.TermGenerator()
-    termgen.set_document(doc)
-
-    # sortable,  旧的value 会被新的value替代
-    for field, value in internal_doc['sortable'].iteritems():
-        slot_and_type, value = value.items()[0]
-        slotnum, types = slot_and_type.split(':')
-        if types == 'float':
-            value = xapian.sortable_serialise(float(value))
-        doc.add_value(int(slotnum), value)
-
-    removed_prefix = set()
-    for field, value in internal_doc['fields'].iteritems():
-        prefix_and_type, value = value.items()[0]
-        prefix, types = prefix_and_type.split(':')
-
-        # 移除旧的term
-        if xap_doc and prefix not in removed_prefix:
-            termlist = xap_doc.termlist()
-            term = termlist.skip_to(prefix)
-            while 1:
-                if term.term[:2] == prefix:
-                    doc.remove_term(term.term)
-                else:
-                    break
-                try:
-                    term = termlist.next()
-                except StopIteration:
-                    break
-        removed_prefix.add(prefix)
-
-        if types == 'exact':
-            if len(value) > 0:
-                # We use the following check, rather than "isupper()" to ensure
-                # that we match the check performed by the queryparser, regardless
-                # of our locale.
-                if ord(value[0]) >= ord('A') and ord(value[0]) <= ord('Z'):
-                    prefix = prefix + ':'
-
-            # Note - xapian currently restricts term lengths to about 248
-            # characters - except that zero bytes are encoded in two bytes, so
-            # in practice a term of length 125 characters could be too long.
-            # Xapian will give an error when commit() is called after such
-            # documents have been added to the database.
-            # As a simple workaround, we give an error here for terms over 220
-            # characters, which will catch most occurrences of the error early.
-            #
-            # In future, it might be good to change to a hashing scheme in this
-            # situation (or for terms over, say, 64 characters), where the
-            # characters after position 64 are hashed (we obviously need to do this
-            # hashing at search time, too).
-            if len(prefix + value) > 220:
-                raise Exception("Field %r is too long: maximum length "
-                                           "220 - was %d (%r)" %
-                                           (field, len(prefix + value),
-                                            prefix + value))
-
-
-            doc.add_term(prefix + value, 1) # wdfinc default set 1
-
-        elif types == 'freetext':
-            # no positions, weight default set 1
-            termgen.index_text_without_positions(value, 1, prefix)
-            termgen.increase_termpos(10)
-
-    # store
-    data = internal_doc['store']
-    if xap_doc:
-        old_data = pickle.loads(xap_doc.get_data())
-        old_data.update(data)
-        doc.set_data(pickle.dumps(old_data))
     else:
-        doc.set_data(pickle.dumps(data))
+        base_name = os.path.join(db_path, parts)
+        database = xapian.Database(base_name)
 
-    return doc
+    return database
 
 def _query_parse_with_prefix(qp, string, flags, prefix):
     """ """

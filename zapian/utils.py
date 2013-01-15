@@ -1,12 +1,25 @@
 # -*- encoding: utf-8 -*-
 
-""" catalog管理
-
-"""
-from catalog import get_catalog
+import re
+from datetime import datetime
 from time import mktime
-from types import StringTypes
 from cjksplitter import CJKSplitter
+
+LIST_TYPES = (set, list, tuple)
+STRING_TYPES = (str, unicode)
+DATE_TYPES = (datetime, int, float)
+
+def clean_value(value):
+    """ convert value 
+    """
+    if isinstance(value, LIST_TYPES):
+        return clean_list(value)
+    elif isinstance(value, STRING_TYPES):
+        return clean_splitter(value)
+    elif isinstance(value, DATE_TYPES):
+        return clean_date(value)
+    else:
+        raise TypeError('%s is not supported type.' % value)
 
 def process_doc(catalog_name, raw_doc):
     """ 将原始的doc，根据catalog信息，转换为内部的doc形式，用于存放到队列
@@ -53,7 +66,7 @@ def datetimeNorm(value, is_query=False):
     value = int(mktime(value.timetuple()))
     return value
 
-def clean_splitter(value, is_query):
+def clean_splitter(value, is_query=False):
     """ 分词 """
     splitter = CJKSplitter()
     if is_query:
@@ -61,9 +74,9 @@ def clean_splitter(value, is_query):
     else:
         return " ".join(splitter.process([value]))
 
-def clean_date(value, is_query):
+def clean_date(value):
     """ 对时间进行清理 """
-    if type(value) in (tuple, list):
+    if type(value) in LIST_TYPES:
         if value[0] is None and value[1] is None:
             return 
         elif value[0] is None:
@@ -75,14 +88,14 @@ def clean_date(value, is_query):
     if value in ['', u'', None]: return None
     return datetimeNorm(value)
 
-def clean_list(value, is_query):
+CLEAN_LIST_RE = re.compile(r'[\s,@-]')
+def clean_list(value):
     """ 将一个包含字符串的list 转换为字符串，字符串中的“.”"@"和空格将被转换为_"""
-    _rep = lambda s : s.replace(" ", "_").replace(".", "_").replace('@', '_').replace("-", '_')
-    if type(value) not in StringTypes:
-        value =  [ _rep(s) for s in value ] 
+    if type(value) not in STRING_TYPES:
+        value =  [ CLEAN_LIST_RE.sub('_', s) for s in value ] 
         return " ".join(value)
     else:
-        return _rep(value)
+        return CLEAN_LIST_RE.sub('_', value)
 
 def clean_parent(obj, is_query):
     """ 得到一个folder的父容器ID """
@@ -114,14 +127,4 @@ def clean_path(objs, is_query):
         return ""
 
     return " ".join([ str(id) for id in value ])
-
-# 这个字段指定了所要特殊处理格式的的字段和处理函数
-CLEANERS = {
-    unicode:                  clean_splitter,
-    str:                      clean_splitter,
-    datetime:                 clean_date,
-    date:                     clean_date,
-    list:                     clean_list,
-    set:                      clean_list,
-}
 

@@ -18,13 +18,13 @@ class Schema(object):
         """ get prefix by field name
         """
         if name in self.fields:
-            return self.fields[name]['prefix']
+            return self.fields[name]
 
     def get_slot(self, name):
         """ get slot by attribute name
         """
         if name in self.attributes:
-            return self.attributes[name]['slot']
+            return self.attributes[name]
 
     def load(self):
         """ load fields and attributes from the json file """
@@ -45,13 +45,11 @@ class Schema(object):
 
     def add_field(self, name):
         if name not in self.fields:
-            prefix = self._gen_prefix()
-            # XXX type need  be remove
-            self.fields[name] = {'prefix': prefix, 'type': 'text'}
+            prefix = self.fields[name] = self._gen_prefix()
             self.dump()
             return prefix
         else:
-            return self.fields[name]['prefix']
+            return self.fields[name]
 
     def _gen_prefix(self):
         """ new prefix """
@@ -62,12 +60,11 @@ class Schema(object):
 
     def add_attribute(self, name):
         if name not in self.attributes:
-            slot = self._gen_slot()
-            # XXX type need  be remove
-            self.attributes[name] = {'slot': slot, 'type':'float'}
+            slot = self.attributes[name] = self._gen_slot()
+            self.dump()
             return slot
         else:
-            return self.attributes[name]['slot']
+            return self.attributes[name]
 
     def _gen_slot(self):
         """ new slot """

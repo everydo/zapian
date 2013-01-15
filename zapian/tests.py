@@ -3,18 +3,14 @@
 import os
 import sys
 import shutil
+import cPickle as pickle
 import tempfile
 import unittest
 import logging
 from datetime import datetime
 
-#from zapian import (
-#                    catalog, 
-#                    queryset,
-#                    engine,
-#                    xapian_driver)
-
-from schema import Schema
+from api import Zapian, _get_read_db, _get_document
+from utils import clean_value
 
 def initlog(level_name='INFO'):
     """ """
@@ -26,12 +22,77 @@ def initlog(level_name='INFO'):
     logger.addHandler(hdlr)
     logger.setLevel(logging.getLevelName(level_name))
     return logger
+
+# 添加字段, field
+fields = {
+    # 创建人
+    'creators':              'XX',
+    # 标题
+    'title':                 'XH',
+    # 这个是关键字，或者tag
+    'subjects':              'XL',
+    # 创建时间
+    'created':               'XU',
+    'modified':              'XV',
+    'effective':             'XS',
+    'expires':               'XP',
+    #贡献者
+    'contributors':          'XB',
+    'responsibles':          'XM',
+    'responsible':           'XJ',
+    'identifier':            'XR',
+    # 状态
+    'stati':                 'XN',
+    'path':                  'XD',
+    'parent':                'XO',
+    # 开始时间
+    'start':                 'XK',
+    # 结束时间
+    'end':                   'XG',
+    # 总量，工作量
+    'amount':                'XW',
+
+    # 可查看的人
+    'allowed_principals':    'XC',
+    # 禁止查看的人
+    'disallowed_principals': 'XA',
+    # 对象提供的接口 Set
+    'object_provides':       'XQ',
+    #尺寸大小的索引
+    'size':                  'XF',
+    'total_size':            'XI',
+    #检查人  Set
+    'reviewer':              'XE',
+    # 级别
+    'level':                 'XT',
+}
+
+# 初始化索引, store_content
+# 需要返回到结果，进行后续处理的(如统计报表)
+data = ['title', 'size', 'total_size', 'amount', 'creators', 'stati', 'path', 'created']
+
+# 需要做排序的字段, sortable
+attributes = {
+    'expires' :     0,
+    'end' :         1,
+    'effective' :   2,
+    'created' :     3,
+    'total_size' :  4,
+    'title' :       5,
+    'modified' :    6,
+    'start' :       7,
+    'amount' :      8,
+    'createds' :    9,
+    'identifier' :  10,
+    'size' :        11,
+    }
+
     
 class ZapianTest(unittest.TestCase):
 
     def setUp(self):
         # init the database attributes
-        self.data_root = os.path.join(tempfile.mkdtemp(), 'test_zapian')
+        self.data_root = tempfile.mkdtemp()
         self.parts = ['part01', 'part02']
 
         # init the database environ
@@ -39,15 +100,22 @@ class ZapianTest(unittest.TestCase):
             print 'create %s database' % self.data_root
             os.makedirs(self.data_root)
 
+        #import json
+        #schema = json.dumps(dict(fields=fields, attributes=attributes))
+        #with open(os.path.join(self.data_root, 'schema.json'), 'wb') as schema_file:
+        #    schema_file.write(schema)
+
+        self.zapian = Zapian(self.data_root)
         for part_name in self.parts:
             database_path = os.path.join(self.data_root, part_name)
             if not os.path.isdir(database_path):
                 os.makedirs(database_path)
+            self.zapian.add_part(part_name)
 
         # init the test data
         self.doc = {'title':'we are firend', 
-                    'subjects':['file','ktv','what'], 
-                    'created':datetime.now()}
+                    'subjects':['file','ktv','what@gmail.com'], 
+                    'created':datetime(2000, 1, 1)}
 
         #engine.add_document(site_name     = self.site_name,
         #                    catalog_name  = self.catalog_name,
@@ -56,15 +124,16 @@ class ZapianTest(unittest.TestCase):
         #                    doc           = self.doc
         #                    )
 
-    def tearDown(self):
+    def _tearDown(self):
         """ """
         if os.path.exists(self.data_root):
             shutil.rmtree(self.data_root)
 
+        self.zapian.fields.clear()
+        self.zapian.attributes.clear()
+
     def test_schema(self):
-        schema = Schema(self.data_root)
-        for part in self.parts:
-            schema.add_part(part)
+        schema = self.zapian
         # test gen prefix and slot
         prefix = schema._gen_prefix() 
         self.assertTrue(prefix == 'XA')
@@ -75,6 +144,27 @@ class ZapianTest(unittest.TestCase):
         self.assertTrue(schema.get_prefix('new_field') == new_prefix == prefix)
         new_slot = schema.add_attribute('new_attribute')
         self.assertTrue(schema.get_slot('new_attribute') == new_slot == slot)
+
+    def test_add_document(self):
+        self.zapian.add_field('title')
+        self.zapian.add_field('subjects')
+        self.zapian.add_attribute('created')
+        # test add document
+        self.zapian.add_document(self.parts[0], uid='123456', 
+                index=self.doc, data={'data': "测试内容"},
+                flush=True)
+        # test value of the new document
+        doc = _get_document(_get_read_db(self.data_root, 'part01'), '123456')
+        for value in doc.values():
+            if value.num == 0:
+                self.assertEqual(value.value, '946656000')
+        # test term of the new document
+        termlist = ['Q123456', 'XAare', 'XAfirend', 'XAwe', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail']
+        for term in doc.termlist():
+            self.assertTrue(term.term in termlist)
+        # test data of the new document
+        data = pickle.loads( doc.get_data() )['data']
+        self.assertEqual(data, '测试内容')
 
     def atest_remove_database(self):
         """ 测试删除数据库接口
@@ -192,12 +282,6 @@ class ZapianTest(unittest.TestCase):
         self.assertRaises(AssertionError, self.test_search_for_one_database)
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        level_name = sys.argv.pop(1).upper()
-    else:
-        level_name = 'INFO'
-
-    #logger = initlog(level_name)
 
     unittest.main()
 
