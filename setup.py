@@ -32,6 +32,7 @@ setup (
     install_requires = [
         'setuptools',
         'xapian',
+        'PyYAML'
         ],
     zip_safe = False,
 )
