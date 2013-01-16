@@ -1,7 +1,9 @@
 # -*- encoding: utf-8 -*-
 
 import os
-import json
+import yaml
+
+CONFIG_FILE = 'schema.yaml'
 
 class Schema(object):
     """ The schema class is improve xapian fields
@@ -25,21 +27,21 @@ class Schema(object):
         return self.attributes.get(name)
 
     def load(self):
-        """ load fields and attributes from the json file """
-        schema_path = os.path.join(self.db_path, 'schema.json')
+        """ load fields and attributes from the yaml file """
+        schema_path = os.path.join(self.db_path, CONFIG_FILE)
         if os.path.isfile(schema_path):
             with open(schema_path,'rb') as schema_file:
-                schema = json.loads(schema_file.read())
+                schema = yaml.load(schema_file)
 
             self.fields = schema['fields']
             self.attributes = schema['attributes']
 
     def dump(self):
-        """ dump fields and attributes into the json file """
-        schema_path = os.path.join(self.db_path, 'schema.json')
+        """ dump fields and attributes into the yaml file """
+        schema_path = os.path.join(self.db_path, CONFIG_FILE)
         schema = {'fields': self.fields, 'attributes': self.attributes}
         with open(schema_path,'wb') as schema_file:
-            schema_file.write(json.dumps(schema))
+            schema_file.write(yaml.dump(schema))
 
     def add_field(self, name):
         if name not in self.fields:
