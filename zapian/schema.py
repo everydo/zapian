@@ -6,9 +6,9 @@ import json
 class Schema(object):
     """ The schema class is improve xapian fields
     """
-    fields = {}       # {'title':{'prefix’:’NS’, ‘type’:’text|exact|multi’} }
+    fields = {}       # {'title': ’NS’ }
 
-    attributes = {}   # {'created':{'slot':1, 'type':’int|float|timestamp|string’}, }
+    attributes = {}   # {'created':1 }
 
     def __init__(self, db_path):
         self.db_path = db_path
@@ -17,14 +17,12 @@ class Schema(object):
     def get_prefix(self, name):
         """ get prefix by field name
         """
-        if name in self.fields:
-            return self.fields[name]
+        return self.fields.get(name)
 
     def get_slot(self, name):
         """ get slot by attribute name
         """
-        if name in self.attributes:
-            return self.attributes[name]
+        return self.attributes.get(name)
 
     def load(self):
         """ load fields and attributes from the json file """
