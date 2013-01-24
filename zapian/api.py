@@ -168,7 +168,7 @@ class Zapian(Schema):
     def update_document(self, part_name, uid, index, data=None, flush=True):
         """ update xapian document existing fields and attributes
         """
-    	db = _get_write_db(self.db_path, part_name)
+        db = _get_write_db(self.db_path, part_name)
 
         identifier = u'Q' + str(uid)
         old_doc = _get_document(db, str(uid))
@@ -180,43 +180,94 @@ class Zapian(Schema):
 
     def commit(self, part_name):
         """ commit xapian database """
-    	db = _get_write_db(self.db_path, part_name)
-    	db.commit()
+        db = _get_write_db(self.db_path, part_name)
+        db.commit()
 
-    def search(parts, query_str, orderby=None, start=0, stop=0):
+    def string2query(self, query_str, database=None, db_path=None, parts=None):
+        """ convert json into xapian query 
+        """
+        if database is None:
+            database = _get_read_db(db_path, parts=parts or self.parts)
+
+        qp = xapian.QueryParser()
+        qp.set_database(database)
+        qp.set_default_op(xapian.Query.OP_AND)
+
+        query = json.loads(query_str)
+
+        # parse filters
+        queries = []
+        for filters in query['filters']:
+            field, value, op = filters
+            if op == 'parse':
+                _queries = []
+                for f in field:
+                    prefix = self.get_prefix(f)
+                    new_value = value
+                    # 搜索支持部分匹配
+                    _queries.append( qp.parse_query(new_value, xapian.QueryParser.FLAG_WILDCARD, prefix) )
+
+                query = xapian.Query(xapian.Query.OP_OR, _queries)
+
+                queries.append(query)
+                continue
+
+            if not value:
+                continue
+
+            if op == 'allof':
+                query = self.query_field(field, value)
+                queries.append(query)
+
+            elif op == 'anyof':
+                query = self.query_field(field, value, default_op=xapian.Query.OP_OR)
+                queries.append(query)
+
+            elif op == 'range':
+                begin, end = value[:2]
+                query = self.query_range(field, begin, end)
+                queries.append(query)
+
+            elif not op:
+                query = self.query_field(field, value)
+                queries.append(query)
+
+        if len(queries) == 1:
+            combined = queries[0]
+        else:
+            _func = lambda q1, q2: query_filter(q1, q2)
+            combined = reduce( _func, queries)
+
+        return combined
+
+    def search(self, parts, query_str, orderby=None, start=0, stop=0):
         """ 搜索, 返回document id的集合 
 
-       如果parts为空，会对此catalog的所有索引进行搜索。
-       """
-        # 要搜索的数据库位置，允许联合查询
-        database = _get_read_db(site_name, catalog_name, parts)
-        
-        query = string2query(query_str, database, catalog_name)
-        logger.debug("Parsed query is: %s" % str(query))
-        
+        如果parts为空，会对此catalog的所有索引进行搜索。
+        """
+        database = _get_read_db(self.db_path, parts=parts or self.parts)
+        query = self.string2query(query_str, database=database)
         enquire = xapian.Enquire(database)
         enquire.set_query(query)
         
         # sort
         if orderby is not None:
             asc = True
-        if orderby[0] == '-':
-            asc = False
-            orderby = orderby[1:]
-        elif orderby[0] == '+':
-            orderby = orderby[1:]
+            if orderby[0] == '-':
+                asc = False
+                orderby = orderby[1:]
+            elif orderby[0] == '+':
+                orderby = orderby[1:]
 
-        catalog = get_catalog(catalog_name)
-        try:
-            slotnum = catalog.attributes[orderby]['slot']
-        except KeyError:
-            raise Exception("Field %r was not indexed for sorting" % orderby)
+            slotnum = self.get_slot(orderby)
+            if not slotnum:
+                raise Exception("Field %r was not indexed for sorting" % orderby)
 
-        # Note: we invert the "asc" parameter, because xapian treats
-        # "ascending" as meaning "higher values are better"; in other
-        # words, it considers "ascending" to mean return results in
-        # descending order.
-        enquire.set_sort_by_value_then_relevance(slotnum, not asc)
+            # Note: we invert the "asc" parameter, because xapian treats
+            # "ascending" as meaning "higher values are better"; in other
+            # words, it considers "ascending" to mean return results in
+            # descending order.
+            enquire.set_sort_by_value_then_relevance(slotnum, not asc)
 
         enquire.set_docid_order(enquire.DONT_CARE)
 
@@ -228,9 +279,9 @@ class Zapian(Schema):
             except xapian.DatabaseModifiedError:
                 database.reopen()
 
-            # 返回结果的ID集
-            def _get_docid(match):
-                tl = match.document.termlist()
+        # 返回结果的ID集
+        def _get_docid(match):
+            tl = match.document.termlist()
             try:
                 term = tl.skip_to('Q').term
                 if len(term) == 0 or term[0] != 'Q':
@@ -239,8 +290,61 @@ class Zapian(Schema):
                 return None
             return term[1:]
 
-        return map(lambda match: _get_docid(match), matches)
+        return map(_get_docid, matches)
 
+    def query_field(self, db_path, field, value, default_op=xapian.Query.OP_AND):
+        """ """ 
+        #try:
+        #    types = catalog.fields[field]['type']
+        #except KeyError:
+        #    types = catalog.attributes[field]['type']
+
+        #if types == 'exact':
+        #    prefix = catalog.fields[field]['prefix']
+        #    if len(value) > 0:
+        #        chval = ord(value[0])
+        #        if chval >= ord('A') and chval <= ord('Z'):
+        #            prefix = prefix + ':'
+        #    return xapian.Query(prefix + value)
+
+        #if types == 'freetext':
+        #    qp = xapian.QueryParser()
+        #    qp.set_default_op(default_op)
+        #    prefix = self.get_prefix(field)
+        #    return _query_parse_with_fallback(qp, value, prefix)
+
+        #return xapian.Query()
+
+        # FIXME
+        prefix = self.get_prefix(field)
+
+        if not prefix:
+            return xapian.Query()
+        else:
+            qp = xapian.QueryParser()
+            qp.set_default_op(default_op)
+            return _query_parse_with_fallback(qp, value, prefix)
+
+    def query_range(self, field, begin, end):
+        """ """
+        if begin is None and end is None:
+            # Return a "match everything" query
+            return xapian.Query('')
+
+        slot = self.get_slot(field)
+        if not slot:
+            # Return a "match nothing" query
+            return xapian.Query()
+
+        begin, end = normalize_range(begin, end)
+
+        if begin is None:
+            return xapian.Query(xapian.Query.OP_VALUE_LE, slot, end)
+
+        if end is None:
+            return xapian.Query(xapian.Query.OP_VALUE_GE, slot, begin)
+
+        return xapian.Query(xapian.Query.OP_VALUE_RANGE, slot, begin, end)
 
 def _get_document(db, uid):
     """Get the document with the specified unique ID.
@@ -280,32 +384,17 @@ def _get_write_db(db_path, part_name, protocol=''):
         _write_database_index[part_path] = db
         return db
 
-def _get_read_db(db_path, parts=None, protocol=''):
+def _get_read_db(db_path, parts, protocol=''):
     """ get xapian readonly database
-        protocol: the future may support.
+        protocol: the future maybe support.
     """
-    # 如果没有parts， 默认搜索整个catalog目录下的database
-    if parts is None:
-        parts = []
-        for part in os.listdir(db_path):
-            if os.path.isdir(part):
-                parts.append(part)
+    base_name = os.path.join(db_path, parts[0])
+    database = xapian.Database(base_name)
 
-    if not parts:
-        raise IOError('%s is not validate datebase' % db_path)
-
-    if isinstance(parts, (list, tuple, set)):
-        base_name = os.path.join(db_path, parts.pop(0))
-        database = xapian.Database(base_name)
-
-        # 适用于多个数据库查询
-        for part_name in parts:
-            other_name = os.path.join(db_path, part_name)
+    # 适用于多个数据库查询
+    for part_name in parts[1:]:
+        other_name = os.path.join(db_path, part_name)
         database.add_database(xapian.Database(other_name))
-
-    else:
-        base_name = os.path.join(db_path, parts)
-        database = xapian.Database(base_name)
 
     return database
 
@@ -349,41 +438,6 @@ def _query_parse_with_fallback(qp, string, prefix=None):
 
     return xapian.Query(xapian.Query.OP_AND_MAYBE, q1, q2)
 
-def query_field(db_path, field, value, default_op=xapian.Query.OP_AND):
-    """ """ 
-    catalog = get_catalog(catalog_name)
-
-    # need to check on field type, and stem / split as appropriate
-
-    try:
-        types = catalog.fields[field]['type']
-    except KeyError:
-        types = catalog.attributes[field]['type']
-
-    if types == 'exact':
-        prefix = catalog.fields[field]['prefix']
-        if len(value) > 0:
-            chval = ord(value[0])
-            if chval >= ord('A') and chval <= ord('Z'):
-                prefix = prefix + ':'
-        return xapian.Query(prefix + value)
-
-    if types == 'freetext':
-        qp = xapian.QueryParser()
-        qp.set_default_op(default_op)
-        catalog_field = catalog.fields[field]
-        prefix = catalog_field['prefix']
-        if 'language' in catalog_field:
-            try:
-                lang = catalog.fields[field]['language']
-                qp.set_stemmer(xapian.Stem(lang))
-                qp.set_stemming_strategy(qp.STEM_SOME)
-            except KeyError:
-                pass
-        return _query_parse_with_fallback(qp, value, prefix)
-
-    return xapian.Query()
-
 def query_filter(query, filter, exclude=False):
     """ """
     if not isinstance(filter, xapian.Query):
@@ -393,101 +447,18 @@ def query_filter(query, filter, exclude=False):
     else:
         return xapian.Query(xapian.Query.OP_FILTER, query, filter)
 
-def query_range(db_path, field, begin, end):
-    """ """
-    if begin is None and end is None:
-        # Return a "match everything" query
-        return xapian.Query('')
-
-    catalog = get_catalog(catalog_name)
-    try:
-        slot_info = catalog.attributes[field]
-    except KeyError:
-        # Return a "match nothing" query
-        return xapian.Query()
-
-    slot, sorttype = slot_info['slot'], slot_info['type']
-    def fn(_value):
-        if sorttype == 'float':
-            return xapian.sortable_serialise(float(_value))
-        return str(_value)
+def normalize_range(begin, end):
+    """ 查询时，转换range 参数，主要是把 float/int 转换为 str 格式 """
 
     if begin is not None:
-        begin = fn(field, begin)
-    if end is not None:
-        end = fn(field, end)
-
-    if begin is None:
-        return xapian.Query(xapian.Query.OP_VALUE_LE, slot, end)
-
-    if end is None:
-        return xapian.Query(xapian.Query.OP_VALUE_GE, slot, begin)
-
-    return xapian.Query(xapian.Query.OP_VALUE_RANGE, slot, begin, end)
-
-def normalize_range(value):
-    """ 查询时，转换range 参数，主要是把 float/int 转换为 str 格式 """
-    def change_str(item):
-        if item is None:
-            return item
+        if isinstance(begin, float):
+            begin = xapian.sortable_serialise(float(begin))
         else:
-            return str(item)
-    return [change_str(v) for v in value]
+            begin = str(begin)
 
-def string2query(db_path, query_str, database):
-    """ 把json格式的query 转换为xapian 的query
-    """
-    qp = xapian.QueryParser()
-    qp.set_database(database)
-    qp.set_default_op(xapian.Query.OP_AND)
-
-    query = json.loads(query_str)
-    logger.debug('query string is: %s' % str(query))
-
-    # parse filters
-    catalog = get_catalog(catalog_name)
-    queries = []
-    for filters in query['filters']:
-        field, value, op = filters
-        if op == 'parse':
-            _queries = []
-            for f in field:
-                prefix = catalog.fields[f]['prefix']
-                new_value = value
-                # 搜索支持部分匹配
-
-                _queries.append( qp.parse_query(new_value, xapian.QueryParser.FLAG_WILDCARD, prefix) )
-
-            query = xapian.Query(xapian.Query.OP_OR, _queries)
-
-            queries.append(query)
-            continue
-
-        if not value:
-            continue
-
-        if op == 'allof':
-            query = query_field(field, value, catalog_name)
-            queries.append(query)
-
-        elif op == 'anyof':
-            query = query_field(field, value, catalog_name, default_op=xapian.Query.OP_OR)
-            queries.append(query)
-
-        elif op == 'range':
-            query = query_range(field, catalog_name, *normalize_range(value))
-            queries.append(query)
-
-        elif not op:
-            query = query_field(field, value, catalog_name)
-            queries.append(query)
-
-    if len(queries) == 1:
-        combined = queries[0]
-    else:
-        _func = lambda q1, q2: query_filter(q1, q2)
-        combined = reduce( _func, queries)
-
-    return combined
-
-
+    if end is not None:
+        if isinstance(end, float):
+            end = xapian.sortable_serialise(float(end))
+        else:
+            end = str(end)
+    return begin, end

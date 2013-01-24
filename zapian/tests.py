@@ -10,7 +10,6 @@ import logging
 from datetime import datetime
 
 from api import Zapian, _get_read_db, _get_document
-from utils import clean_value
 
 def initlog(level_name='INFO'):
     """ """
@@ -100,11 +99,6 @@ class ZapianTest(unittest.TestCase):
             print 'create %s database' % self.data_root
             os.makedirs(self.data_root)
 
-        #import json
-        #schema = json.dumps(dict(fields=fields, attributes=attributes))
-        #with open(os.path.join(self.data_root, 'schema.json'), 'wb') as schema_file:
-        #    schema_file.write(schema)
-
         self.zapian = Zapian(self.data_root)
         for part_name in self.parts:
             database_path = os.path.join(self.data_root, part_name)
@@ -124,7 +118,7 @@ class ZapianTest(unittest.TestCase):
         #                    doc           = self.doc
         #                    )
 
-    def _tearDown(self):
+    def tearDown(self):
         """ """
         if os.path.exists(self.data_root):
             shutil.rmtree(self.data_root)
@@ -136,35 +130,53 @@ class ZapianTest(unittest.TestCase):
         schema = self.zapian
         # test gen prefix and slot
         prefix = schema._gen_prefix() 
-        self.assertTrue(prefix == 'XA')
+        self.assertEqual(prefix, 'XA')
         slot = schema._gen_slot()
-        self.assertTrue(slot == 0)
+        self.assertEqual(slot, 0)
         # test add field and attribute
         new_prefix = schema.add_field('new_field')
         self.assertTrue(schema.get_prefix('new_field') == new_prefix == prefix)
         new_slot = schema.add_attribute('new_attribute')
         self.assertTrue(schema.get_slot('new_attribute') == new_slot == slot)
 
-    def test_add_document(self):
+    def test_add_document(self, uid='123456', part=None):
+        part = part if part is not None else self.parts[0]
         self.zapian.add_field('title')
         self.zapian.add_field('subjects')
         self.zapian.add_attribute('created')
         # test add document
-        self.zapian.add_document(self.parts[0], uid='123456', 
+        self.zapian.add_document(part, uid=uid, 
                 index=self.doc, data={'data': "测试内容"},
                 flush=True)
         # test value of the new document
-        doc = _get_document(_get_read_db(self.data_root, 'part01'), '123456')
+        doc = _get_document(_get_read_db(self.data_root, [part]), uid)
         for value in doc.values():
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
         # test term of the new document
-        termlist = ['Q123456', 'XAare', 'XAfirend', 'XAwe', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail']
+        termlist = ['XAare', 'XAfirend', 'XAwe', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail']
+        termlist.append('Q'+uid)
         for term in doc.termlist():
             self.assertTrue(term.term in termlist)
         # test data of the new document
         data = pickle.loads( doc.get_data() )['data']
         self.assertEqual(data, '测试内容')
+
+    def test_del_document(self):
+        part = self.parts[0]
+        # add a document 
+        self.test_add_document(uid='123456', part=part)
+        # delete the document
+        self.zapian.delete_document(part, uids=['123456'], flush=True)
+        # test get the document, it will be raise KeyError
+        try:
+            _get_document(_get_read_db(self.data_root, [part]), '123456')
+            raise AssertionError("Unique ID '123456' is exists")
+        except KeyError:
+            pass
+
+    def test_search_document(self):
+        pass
 
     def atest_remove_database(self):
         """ 测试删除数据库接口
@@ -175,15 +187,6 @@ class ZapianTest(unittest.TestCase):
         for part_name in self.parts[1:]:
             database_path = os.path.join(self.data_root, self.site_name, self.catalog_name, part_name)
             self.assertTrue(os.path.exists(database_path))
-
-    def atest_delete_document(self):
-        """ 测试删除一个记录
-        """
-        engine.delete_document(site_name = self.site_name,
-                                catalog_name = self.catalog_name,
-                                part_name = self.parts[0],
-                                uid = '123456',)
-        self.assertRaises(AssertionError, self.test_search_for_one_database)
 
     def atest_search_for_one_database(self, qs=None, search_uid='123456'):
         """ 测试一个数据库搜索
