@@ -1,93 +1,15 @@
 #encoding=utf-8
 
 import os
-import sys
 import shutil
 import cPickle as pickle
 import tempfile
 import unittest
-import logging
 import json
 from datetime import datetime
 
 from api import Zapian, _get_read_db, _get_document
 
-def initlog(level_name='INFO'):
-    """ """
-    logger = logging.getLogger('zopen.haystack')
-    hdlr = logging.StreamHandler(sys.stdout)
-    #hdlr = logging.FileHandler('/tmp/xapian.txt')
-    formatter = logging.Formatter('%(levelname)s %(message)s')
-    hdlr.setFormatter(formatter)
-    logger.addHandler(hdlr)
-    logger.setLevel(logging.getLevelName(level_name))
-    return logger
-
-# 添加字段, field
-fields = {
-    # 创建人
-    'creators':              'XX',
-    # 标题
-    'title':                 'XH',
-    # 这个是关键字，或者tag
-    'subjects':              'XL',
-    # 创建时间
-    'created':               'XU',
-    'modified':              'XV',
-    'effective':             'XS',
-    'expires':               'XP',
-    #贡献者
-    'contributors':          'XB',
-    'responsibles':          'XM',
-    'responsible':           'XJ',
-    'identifier':            'XR',
-    # 状态
-    'stati':                 'XN',
-    'path':                  'XD',
-    'parent':                'XO',
-    # 开始时间
-    'start':                 'XK',
-    # 结束时间
-    'end':                   'XG',
-    # 总量，工作量
-    'amount':                'XW',
-
-    # 可查看的人
-    'allowed_principals':    'XC',
-    # 禁止查看的人
-    'disallowed_principals': 'XA',
-    # 对象提供的接口 Set
-    'object_provides':       'XQ',
-    #尺寸大小的索引
-    'size':                  'XF',
-    'total_size':            'XI',
-    #检查人  Set
-    'reviewer':              'XE',
-    # 级别
-    'level':                 'XT',
-}
-
-# 初始化索引, store_content
-# 需要返回到结果，进行后续处理的(如统计报表)
-data = ['title', 'size', 'total_size', 'amount', 'creators', 'stati', 'path', 'created']
-
-# 需要做排序的字段, sortable
-attributes = {
-    'expires' :     0,
-    'end' :         1,
-    'effective' :   2,
-    'created' :     3,
-    'total_size' :  4,
-    'title' :       5,
-    'modified' :    6,
-    'start' :       7,
-    'amount' :      8,
-    'createds' :    9,
-    'identifier' :  10,
-    'size' :        11,
-    }
-
-    
 class ZapianTest(unittest.TestCase):
 
     def setUp(self):
