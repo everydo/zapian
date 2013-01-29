@@ -137,14 +137,14 @@ class ZapianTest(unittest.TestCase):
         self.assertEqual(new_zapian.fields, {'new_field':'XA'})
         self.assertEqual(new_zapian.attributes, {'new_attribute':0})
 
-    def _add_document(self, uid, part=None):
+    def _add_document(self, uid, part=None, doc=None):
         part = part if part is not None else self.parts[0]
         self.zapian.add_field('title')
         self.zapian.add_field('subjects')
         self.zapian.add_attribute('created')
         # test add document
         self.zapian.add_document(part, uid=uid, 
-                index=self.doc, data={'data': "测试内容"},
+                index=doc or self.doc, data={'data': "测试内容"},
                 flush=True)
 
     def test_add_document(self):
@@ -238,7 +238,46 @@ class ZapianTest(unittest.TestCase):
 
         self.assertEqual([uid], results)
 
-if __name__ == '__main__':
+    def test_search_document_for_mulit_database(self):
+        """ """
+        # add first document into first database
+        first_uid = "12345"
+        first_doc = {'title':'we are firend', 
+                    'subjects':['file','ktv','what@gmail.com'] 
+                    }
+        self._add_document(uid=first_uid, part=self.parts[0], doc=first_doc)
+        # add second document into second database
+        second_uid = '67890'
+        second_doc = {'title':'Go to school', 
+                    'subjects':['morning','walking','sport'] 
+                    }
+        self._add_document(uid=second_uid, part=self.parts[1], doc=second_doc)
+        # search for muilt database
 
+        # search firrst document
+        query_str = json.dumps({'filters': [  
+                                                [[u'title'], u'we', u'parse'],
+                                                [u'subjects', u'file ktv', u'anyof'],
+                                ] })
+        results = self.zapian.search(self.parts, query_str, start=0, stop=10)
+        self.assertEqual([first_uid], results)
+
+        # search second document
+        query_str = json.dumps({'filters': [  
+                                                [[u'title'], u'Go', u'parse'],
+                                                [u'subjects', u'walking sport', u'anyof'],
+                                ] })
+        results = self.zapian.search(self.parts, query_str, start=0, stop=10)
+        self.assertEqual([second_uid], results)
+
+        # search two document
+        query_str = json.dumps({'filters': [  
+                                                [u'title', u'Go we', u'anyof'],
+                                                [u'subjects', u'walking sport ktv', u'anyof'],
+                                ] })
+        results = self.zapian.search(self.parts, query_str, start=0, stop=10)
+        self.assertEqual(set([first_uid, second_uid]), set(results))
+
+if __name__ == '__main__':
     unittest.main()
 
