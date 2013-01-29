@@ -178,8 +178,6 @@ class ZapianTest(unittest.TestCase):
         self._add_document(uid=uid, part=part)
         new_doc = self.doc.copy()
         new_doc['title'] = "new title"
-        # the "new-field" is not save to xapian because we use update api
-        new_doc['new-field'] = 'last'
 
         self.zapian.update_document(part, uid=uid, index=new_doc, flush=True)
         # test value of the new document
@@ -188,14 +186,35 @@ class ZapianTest(unittest.TestCase):
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
         # test term of the new document
-        termlist = ['XAnew', 'XAtitle', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail']
-        termlist.append('Q'+uid)
-        for term in doc.termlist():
-            self.assertFalse(term.term.endswith('last'))
-            self.assertTrue(term.term in termlist)
+        validate_terms = ['XAnew', 'XAtitle', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail', 'Q'+uid]
+        old_terms = [term.term for term in doc.termlist()]
+        self.assertEqual(set(validate_terms), set(old_terms))
         # test data of the new document
         data = pickle.loads( doc.get_data() )['data']
         self.assertEqual(data, '测试内容')
+
+    def test_replace_document(self):
+        part = self.parts[0]
+        uid = "12345"
+        # add a document 
+        self._add_document(uid=uid, part=part)
+        new_doc = self.doc.copy()
+        new_doc['title'] = "new title"
+        self.zapian.add_field('new-field')
+        new_doc['new-field'] = 'last'
+
+        self.zapian.replace_document(part, uid=uid, index=new_doc, flush=True)
+        # test value of the new document
+        doc = _get_document(_get_read_db(self.data_root, [part]), uid)
+        for value in doc.values():
+            if value.num == 0:
+                self.assertEqual(value.value, '946656000')
+        # test term of the new document
+        validate_terms = ['XAnew', 'XAtitle', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail', 'XClast', 'Q'+uid]
+        old_terms = [term.term for term in doc.termlist()]
+        self.assertEqual(set(validate_terms), set(old_terms))
+        # test data of the new document
+        self.assertEqual(doc.get_data(), '')
 
     def test_del_document(self):
         part = self.parts[0]
