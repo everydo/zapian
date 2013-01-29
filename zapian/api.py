@@ -292,7 +292,7 @@ class Zapian(Schema):
 
         return map(_get_docid, matches)
 
-    def query_field(self, db_path, field, value, default_op=xapian.Query.OP_AND):
+    def query_field(self, field, value, default_op=xapian.Query.OP_AND):
         """ """ 
         #try:
         #    types = catalog.fields[field]['type']

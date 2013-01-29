@@ -7,6 +7,7 @@ import cPickle as pickle
 import tempfile
 import unittest
 import logging
+import json
 from datetime import datetime
 
 from api import Zapian, _get_read_db, _get_document
@@ -110,13 +111,6 @@ class ZapianTest(unittest.TestCase):
         self.doc = {'title':'we are firend', 
                     'subjects':['file','ktv','what@gmail.com'], 
                     'created':datetime(2000, 1, 1)}
-
-        #engine.add_document(site_name     = self.site_name,
-        #                    catalog_name  = self.catalog_name,
-        #                    part_name     = self.parts[0],
-        #                    uid           = 123456, 
-        #                    doc           = self.doc
-        #                    )
 
     def tearDown(self):
         """ """
@@ -231,7 +225,18 @@ class ZapianTest(unittest.TestCase):
             pass
 
     def test_search_document(self):
-        pass
+        part = self.parts[0]
+        uid = "12345"
+        # add a document 
+        self._add_document(uid=uid, part=part)
+        # serach
+        query_str = json.dumps({'filters': [  
+                                                [[u'title'], u'we', u'parse'],
+                                                [u'subjects', u'file ktv', u'anyof'],
+                                ] })
+        results = self.zapian.search([part], query_str, start=0, stop=10)
+
+        self.assertEqual([uid], results)
 
 if __name__ == '__main__':
 
