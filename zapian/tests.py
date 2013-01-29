@@ -143,7 +143,7 @@ class ZapianTest(unittest.TestCase):
         self.assertEqual(new_zapian.fields, {'new_field':'XA'})
         self.assertEqual(new_zapian.attributes, {'new_attribute':0})
 
-    def test_add_document(self, uid='123456', part=None):
+    def _add_document(self, uid, part=None):
         part = part if part is not None else self.parts[0]
         self.zapian.add_field('title')
         self.zapian.add_field('subjects')
@@ -152,6 +152,11 @@ class ZapianTest(unittest.TestCase):
         self.zapian.add_document(part, uid=uid, 
                 index=self.doc, data={'data': "测试内容"},
                 flush=True)
+
+    def test_add_document(self):
+        part = self.parts[0]
+        uid = "12345"
+        self._add_document(uid, part)
         # test value of the new document
         doc = _get_document(_get_read_db(self.data_root, [part]), uid)
         for value in doc.values():
@@ -166,16 +171,43 @@ class ZapianTest(unittest.TestCase):
         data = pickle.loads( doc.get_data() )['data']
         self.assertEqual(data, '测试内容')
 
+    def test_update_document(self):
+        part = self.parts[0]
+        uid = "12345"
+        # add a document 
+        self._add_document(uid=uid, part=part)
+        new_doc = self.doc.copy()
+        new_doc['title'] = "new title"
+        # the "new-field" is not save to xapian because we use update api
+        new_doc['new-field'] = 'last'
+
+        self.zapian.update_document(part, uid=uid, index=new_doc, flush=True)
+        # test value of the new document
+        doc = _get_document(_get_read_db(self.data_root, [part]), uid)
+        for value in doc.values():
+            if value.num == 0:
+                self.assertEqual(value.value, '946656000')
+        # test term of the new document
+        termlist = ['XAnew', 'XAtitle', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail']
+        termlist.append('Q'+uid)
+        for term in doc.termlist():
+            self.assertFalse(term.term.endswith('last'))
+            self.assertTrue(term.term in termlist)
+        # test data of the new document
+        data = pickle.loads( doc.get_data() )['data']
+        self.assertEqual(data, '测试内容')
+
     def test_del_document(self):
         part = self.parts[0]
+        uid = "12345"
         # add a document 
-        self.test_add_document(uid='123456', part=part)
+        self._add_document(uid=uid, part=part)
         # delete the document
-        self.zapian.delete_document(part, uids=['123456'], flush=True)
+        self.zapian.delete_document(part, uids=[uid], flush=True)
         # test get the document, it will be raise KeyError
         try:
-            _get_document(_get_read_db(self.data_root, [part]), '123456')
-            raise AssertionError("Unique ID '123456' is exists")
+            _get_document(_get_read_db(self.data_root, [part]), uid)
+            raise AssertionError("Unique ID '%s' is exists" % uid)
         except KeyError:
             pass
 
