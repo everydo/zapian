@@ -79,10 +79,10 @@ class ZapianTest(unittest.TestCase):
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
         # test term of the new document
-        termlist = ['XAare', 'XAfirend', 'XAwe', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail']
-        termlist.append('Q'+uid)
-        for term in doc.termlist():
-            self.assertTrue(term.term in termlist)
+        validate_terms = ['XAare', 'XAfirend', 'XAwe', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail', 'Q'+uid]
+        old_terms = [ term.term for term in doc.termlist() ]
+        self.assertTrue(len(validate_terms), len(old_terms))
+        self.assertEqual(set(validate_terms), set(old_terms))
         # test data of the new document
         data = pickle.loads( doc.get_data() )['data']
         self.assertEqual(data, '测试内容')
@@ -104,6 +104,7 @@ class ZapianTest(unittest.TestCase):
         # test term of the new document
         validate_terms = ['XAnew', 'XAtitle', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail', 'Q'+uid]
         old_terms = [term.term for term in doc.termlist()]
+        self.assertTrue(len(validate_terms), len(old_terms))
         self.assertEqual(set(validate_terms), set(old_terms))
         # test data of the new document
         data = pickle.loads( doc.get_data() )['data']
@@ -128,6 +129,7 @@ class ZapianTest(unittest.TestCase):
         # test term of the new document
         validate_terms = ['XAnew', 'XAtitle', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail', 'XClast', 'Q'+uid]
         old_terms = [term.term for term in doc.termlist()]
+        self.assertTrue(len(validate_terms), len(old_terms))
         self.assertEqual(set(validate_terms), set(old_terms))
         # test data of the new document
         self.assertEqual(doc.get_data(), '')
@@ -174,6 +176,11 @@ class ZapianTest(unittest.TestCase):
                     'subjects':['morning','walking','sport'] 
                     }
         self._add_document(uid=second_uid, part=self.parts[1], doc=second_doc)
+        # add third document into first database
+        third_doc = {'title': 'Big Data',
+                    'subjects': ['big', 'expensive']}
+        self._add_document(uid="45678", part=self.parts[0], doc=third_doc)
+
         # search for muilt database
 
         # search firrst document
@@ -198,6 +205,7 @@ class ZapianTest(unittest.TestCase):
                                                 [u'subjects', u'walking sport ktv', u'anyof'],
                                 ] })
         results = self.zapian.search(self.parts, query_str, start=0, stop=10)
+        self.assertEqual(len(results), 2)
         self.assertEqual(set([first_uid, second_uid]), set(results))
 
 if __name__ == '__main__':
