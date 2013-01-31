@@ -5,7 +5,6 @@ import shutil
 import cPickle as pickle
 import tempfile
 import unittest
-import json
 from datetime import datetime
 
 from api import Zapian, _get_read_db, _get_document
@@ -154,12 +153,11 @@ class ZapianTest(unittest.TestCase):
         # add a document 
         self._add_document(uid=uid, part=part)
         # serach
-        query_str = json.dumps({'filters': [  
+        query = {'filters': [  
                                                 [[u'title'], u'we', u'parse'],
                                                 [u'subjects', u'file ktv', u'anyof'],
-                                ] })
-        results = self.zapian.search([part], query_str, start=0, stop=10)
-
+                                ] }
+        results = self.zapian.search([part], query, start=0, stop=10)
         self.assertEqual([uid], results)
 
     def test_search_document_for_mulit_database(self):
@@ -184,27 +182,27 @@ class ZapianTest(unittest.TestCase):
         # search for muilt database
 
         # search firrst document
-        query_str = json.dumps({'filters': [  
+        query = {'filters': [  
                                                 [[u'title'], u'we', u'parse'],
                                                 [u'subjects', u'file ktv', u'anyof'],
-                                ] })
-        results = self.zapian.search(self.parts, query_str, start=0, stop=10)
+                                ] }
+        results = self.zapian.search(self.parts, query, start=0, stop=10)
         self.assertEqual([first_uid], results)
 
         # search second document
-        query_str = json.dumps({'filters': [  
+        query = {'filters': [  
                                                 [[u'title'], u'Go', u'parse'],
                                                 [u'subjects', u'walking sport', u'anyof'],
-                                ] })
-        results = self.zapian.search(self.parts, query_str, start=0, stop=10)
+                                ] }
+        results = self.zapian.search(self.parts, query, start=0, stop=10)
         self.assertEqual([second_uid], results)
 
         # search two document
-        query_str = json.dumps({'filters': [  
+        query = {'filters': [  
                                                 [u'title', u'Go we', u'anyof'],
                                                 [u'subjects', u'walking sport ktv', u'anyof'],
-                                ] })
-        results = self.zapian.search(self.parts, query_str, start=0, stop=10)
+                                ] }
+        results = self.zapian.search(self.parts, query, start=0, stop=10)
         self.assertEqual(len(results), 2)
         self.assertEqual(set([first_uid, second_uid]), set(results))
 
