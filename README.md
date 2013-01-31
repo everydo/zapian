@@ -7,6 +7,8 @@ zapian: schemaless python interface to Xapian
 
 那么zapian，可能是你需要的....
 
+欢迎拍砖： http://weibo.com/panjunyong
+
 特性
 =============
 
