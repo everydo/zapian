@@ -5,7 +5,6 @@
 import os
 import shutil
 import xapian
-import json
 import cPickle as pickle
 from utils import clean_value
 from schema import Schema
@@ -183,8 +182,8 @@ class Zapian(Schema):
         db = _get_write_db(self.db_path, part_name)
         db.commit()
 
-    def string2query(self, query_str, database=None, db_path=None, parts=None):
-        """ convert json into xapian query 
+    def _get_xapian_query(self, query, database=None, db_path=None, parts=None):
+        """ convert to xapian query 
         """
         if database is None:
             database = _get_read_db(db_path, parts=parts or self.parts)
@@ -192,8 +191,6 @@ class Zapian(Schema):
         qp = xapian.QueryParser()
         qp.set_database(database)
         qp.set_default_op(xapian.Query.OP_AND)
-
-        query = json.loads(query_str)
 
         # parse filters
         queries = []
@@ -240,15 +237,15 @@ class Zapian(Schema):
 
         return combined
 
-    def search(self, parts, query_str, orderby=None, start=0, stop=0):
+    def search(self, parts, query, orderby=None, start=0, stop=0):
         """ 搜索, 返回document id的集合 
 
         如果parts为空，会对此catalog的所有索引进行搜索。
         """
         database = _get_read_db(self.db_path, parts=parts or self.parts)
-        query = self.string2query(query_str, database=database)
+        xapian_query = self._get_xapian_query(query, database=database)
         enquire = xapian.Enquire(database)
-        enquire.set_query(query)
+        enquire.set_query(xapian_query)
         
         # sort
         if orderby is not None:
