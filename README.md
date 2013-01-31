@@ -92,9 +92,3 @@ xapian内部对数据有三种用途：term索引、排序字段、返回data；
 
       slots:{'modified':1, 'created':2}
 
-TODO
-==================
-1. 完善schema.py
-2. 完善索引代码
-3. 完善搜索代码
-4. 完善test代码
