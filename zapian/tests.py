@@ -58,29 +58,30 @@ class ZapianTest(unittest.TestCase):
         self.assertEqual(new_zapian.fields, {'new_field':'XA'})
         self.assertEqual(new_zapian.attributes, {'new_attribute':0})
 
-    def _add_document(self, uid, part=None, doc=None):
-        part = part if part is not None else self.parts[0]
-        self.zapian.add_field('title')
-        self.zapian.add_field('subjects')
-        self.zapian.add_attribute('created')
-        # test add document
-        self.zapian.add_document(part, uid=uid, 
-                index=doc or self.doc, data={'data': "测试内容"},
-                flush=True)
-
     def test_add_document(self):
         part = self.parts[0]
         uid = "12345"
-        self._add_document(uid, part)
+        self.zapian.add_document(part, uid=uid, 
+                index=self.doc, data={'data': "测试内容"},
+                flush=True)
         # test value of the new document
         doc = _get_document(_get_read_db(self.data_root, [part]), uid)
         for value in doc.values():
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
         # test term of the new document
-        validate_terms = ['XAare', 'XAfirend', 'XAwe', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail', 'Q'+uid]
+        title_prefix = self.zapian.get_prefix('title', auto_add=False)
+        subjects_prefix = self.zapian.get_prefix('subjects', auto_add=False)
+        validate_terms = ['Q'+uid,
+                            title_prefix + 'are', 
+                            title_prefix + 'firend', 
+                            title_prefix + 'we',
+                            subjects_prefix + 'com', 
+                            subjects_prefix + 'file', 
+                            subjects_prefix + 'ktv', 
+                            subjects_prefix + 'what_gmail', ]
         old_terms = [ term.term for term in doc.termlist() ]
-        self.assertTrue(len(validate_terms), len(old_terms))
+        self.assertTrue(len(validate_terms) == len(old_terms))
         self.assertEqual(set(validate_terms), set(old_terms))
         # test data of the new document
         data = pickle.loads( doc.get_data() )['data']
@@ -90,7 +91,9 @@ class ZapianTest(unittest.TestCase):
         part = self.parts[0]
         uid = "12345"
         # add a document 
-        self._add_document(uid=uid, part=part)
+        self.zapian.add_document(part, uid=uid, 
+                index=self.doc, data={'data': "测试内容"},
+                flush=True)
         new_doc = self.doc.copy()
         new_doc['title'] = "new title"
 
@@ -101,9 +104,17 @@ class ZapianTest(unittest.TestCase):
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
         # test term of the new document
-        validate_terms = ['XAnew', 'XAtitle', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail', 'Q'+uid]
+        title_prefix = self.zapian.get_prefix('title', auto_add=False)
+        subjects_prefix = self.zapian.get_prefix('subjects', auto_add=False)
+        validate_terms = ['Q'+uid,
+                            title_prefix + 'new', 
+                            title_prefix + 'title', 
+                            subjects_prefix + 'com', 
+                            subjects_prefix + 'file', 
+                            subjects_prefix + 'ktv', 
+                            subjects_prefix + 'what_gmail', ]
         old_terms = [term.term for term in doc.termlist()]
-        self.assertTrue(len(validate_terms), len(old_terms))
+        self.assertTrue(len(validate_terms) == len(old_terms))
         self.assertEqual(set(validate_terms), set(old_terms))
         # test data of the new document
         data = pickle.loads( doc.get_data() )['data']
@@ -113,7 +124,9 @@ class ZapianTest(unittest.TestCase):
         part = self.parts[0]
         uid = "12345"
         # add a document 
-        self._add_document(uid=uid, part=part)
+        self.zapian.add_document(part, uid=uid, 
+                index=self.doc, data={'data': "测试内容"},
+                flush=True)
         new_doc = self.doc.copy()
         new_doc['title'] = "new title"
         self.zapian.add_field('new-field')
@@ -126,9 +139,19 @@ class ZapianTest(unittest.TestCase):
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
         # test term of the new document
-        validate_terms = ['XAnew', 'XAtitle', 'XBcom', 'XBfile', 'XBktv', 'XBwhat_gmail', 'XClast', 'Q'+uid]
+        title_prefix = self.zapian.get_prefix('title', auto_add=False)
+        subjects_prefix = self.zapian.get_prefix('subjects', auto_add=False)
+        new_field_prefix = self.zapian.get_prefix('new-field', auto_add=False)
+        validate_terms = ['Q'+uid,
+                            new_field_prefix + 'last',
+                            title_prefix + 'new', 
+                            title_prefix + 'title', 
+                            subjects_prefix + 'com', 
+                            subjects_prefix + 'file', 
+                            subjects_prefix + 'ktv', 
+                            subjects_prefix + 'what_gmail', ]
         old_terms = [term.term for term in doc.termlist()]
-        self.assertTrue(len(validate_terms), len(old_terms))
+        self.assertTrue(len(validate_terms) == len(old_terms))
         self.assertEqual(set(validate_terms), set(old_terms))
         # test data of the new document
         self.assertEqual(doc.get_data(), '')
@@ -137,7 +160,9 @@ class ZapianTest(unittest.TestCase):
         part = self.parts[0]
         uid = "12345"
         # add a document 
-        self._add_document(uid=uid, part=part)
+        self.zapian.add_document(part, uid=uid, 
+                index=self.doc, data={'data': "测试内容"},
+                flush=True)
         # delete the document
         self.zapian.delete_document(part, uids=[uid], flush=True)
         # test get the document, it will be raise KeyError
@@ -151,7 +176,9 @@ class ZapianTest(unittest.TestCase):
         part = self.parts[0]
         uid = "12345"
         # add a document 
-        self._add_document(uid=uid, part=part)
+        self.zapian.add_document(part, uid=uid, 
+                index=self.doc, data={'data': "测试内容"},
+                flush=True)
         # serach
         query = {'filters': [  
                                                 [[u'title'], u'we', u'parse'],
@@ -167,17 +194,23 @@ class ZapianTest(unittest.TestCase):
         first_doc = {'title':'we are firend', 
                     'subjects':['file','ktv','what@gmail.com'] 
                     }
-        self._add_document(uid=first_uid, part=self.parts[0], doc=first_doc)
+        self.zapian.add_document(self.parts[0], uid="12345", 
+                index=first_doc, data={'data': "测试内容"},
+                flush=True)
         # add second document into second database
         second_uid = '67890'
         second_doc = {'title':'Go to school', 
                     'subjects':['morning','walking','sport'] 
                     }
-        self._add_document(uid=second_uid, part=self.parts[1], doc=second_doc)
+        self.zapian.add_document(self.parts[1], uid="67890", 
+                index=second_doc, data={'data': "测试内容"},
+                flush=True)
         # add third document into first database
         third_doc = {'title': 'Big Data',
                     'subjects': ['big', 'expensive']}
-        self._add_document(uid="45678", part=self.parts[0], doc=third_doc)
+        self.zapian.add_document(self.parts[0], uid="45678", 
+                index=third_doc, data={'data': "测试内容"},
+                flush=True)
 
         # search for muilt database
 

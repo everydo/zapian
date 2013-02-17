@@ -6,6 +6,8 @@ import os
 import shutil
 import xapian
 import cPickle as pickle
+from datetime import datetime
+
 from utils import clean_value
 from schema import Schema
 
@@ -59,9 +61,11 @@ class Zapian(Schema):
         removed_prefix = set()
         # new value will be replace old value
         for field, value in doc.iteritems():
-            value = clean_value(value)
+
             # sortable
-            if field in self.attributes:
+            if isinstance(value, (int, float, datetime)):
+                value = clean_value(value)
+
                 slotnum = self.get_slot(field)
                 if isinstance(value, float):
                     value = xapian.sortable_serialise(float(value))
@@ -70,7 +74,8 @@ class Zapian(Schema):
                     document.add_value(int(slotnum), str(value))
 
             # field
-            if field in self.fields:
+            else:
+                value = clean_value(value)
                 prefix = self.get_prefix(field)
                 types = 'freetext'
 
@@ -199,7 +204,7 @@ class Zapian(Schema):
             if op == 'parse':
                 _queries = []
                 for f in field:
-                    prefix = self.get_prefix(f)
+                    prefix = self.get_prefix(f, auto_add=False)
                     new_value = value
                     # 搜索支持部分匹配
                     _queries.append( qp.parse_query(new_value, xapian.QueryParser.FLAG_WILDCARD, prefix) )
@@ -256,7 +261,7 @@ class Zapian(Schema):
             elif orderby[0] == '+':
                 orderby = orderby[1:]
 
-            slotnum = self.get_slot(orderby)
+            slotnum = self.get_slot(orderby, auto_add=False)
             if not slotnum:
                 raise Exception("Field %r was not indexed for sorting" % orderby)
 
@@ -313,7 +318,7 @@ class Zapian(Schema):
         #return xapian.Query()
 
         # FIXME
-        prefix = self.get_prefix(field)
+        prefix = self.get_prefix(field, auto_add=False)
 
         if not prefix:
             return xapian.Query()
@@ -328,7 +333,7 @@ class Zapian(Schema):
             # Return a "match everything" query
             return xapian.Query('')
 
-        slot = self.get_slot(field)
+        slot = self.get_slot(field, auto_add=False)
         if not slot:
             # Return a "match nothing" query
             return xapian.Query()

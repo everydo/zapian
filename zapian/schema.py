@@ -16,15 +16,21 @@ class Schema(object):
         self.db_path = db_path
         self.load()
 
-    def get_prefix(self, name):
+    def get_prefix(self, name, auto_add=True):
         """ get prefix by field name
         """
-        return self.fields.get(name)
+        prefix = self.fields.get(name)
+        if prefix is None and auto_add:
+            prefix = self.add_field(name)
+        return prefix
 
-    def get_slot(self, name):
+    def get_slot(self, name, auto_add=True):
         """ get slot by attribute name
         """
-        return self.attributes.get(name)
+        slot = self.attributes.get(name)
+        if slot is None and auto_add:
+            slot = self.add_attribute(name)
+        return slot
 
     def load(self):
         """ load fields and attributes from the yaml file """
