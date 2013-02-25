@@ -22,7 +22,8 @@ def clean_value(value):
         raise TypeError('%s is not supported type.' % value)
 
 def datetimeNorm(value, is_query=False):
-    value = int(mktime(value.timetuple()))
+    if isinstance(value, datetime):
+        return int(mktime(value.timetuple()))
     return value
 
 def clean_splitter(value, is_query=False):
@@ -51,8 +52,8 @@ CLEAN_LIST_RE = re.compile(r'[\s,@-]')
 def clean_list(value):
     """ 将一个包含字符串的list 转换为字符串，字符串中的“.”"@"和空格将被转换为_"""
     if type(value) not in STRING_TYPES:
-        value =  [ CLEAN_LIST_RE.sub('_', s) for s in value ] 
+        value =  [ CLEAN_LIST_RE.sub('_', str(s)) for s in value ] 
         return " ".join(value)
     else:
-        return CLEAN_LIST_RE.sub('_', value)
+        return CLEAN_LIST_RE.sub('_', str(value))
 

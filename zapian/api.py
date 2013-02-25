@@ -175,19 +175,43 @@ class Zapian(Schema):
         db = _get_write_db(self.db_path, part_name)
 
         identifier = u'Q' + str(uid)
-        old_doc = _get_document(db, str(uid))
+        old_doc = self.get_document([part_name], str(uid))
 
         new_doc = self.get_interior_doc(index, data=data, xap_doc=old_doc)
         
         db.replace_document(identifier, new_doc)
         if flush: db.commit()
 
+    def get_document(self, part, uid):
+        """Get the document with the specified unique ID.
+
+        Raises a KeyError if there is no such document.  Otherwise, it returns
+        a ProcessedDocument.
+
+        """
+        db = _get_read_db(self.db_path, part)
+        postlist = db.postlist('Q' + uid)
+        try:
+            plitem = postlist.next()
+        except StopIteration:
+            # Unique ID not found
+            raise KeyError('Unique ID %r not found' % uid)
+        try:
+            postlist.next()
+            raise Exception("Multiple documents " #pragma: no cover
+                                       "found with same unique ID")
+        except StopIteration:
+            # Only one instance of the unique ID found, as it should be.
+            pass
+
+        return db.get_document(plitem.docid)
+
     def commit(self, part_name):
         """ commit xapian database """
         db = _get_write_db(self.db_path, part_name)
         db.commit()
 
-    def _get_xapian_query(self, query, database=None, db_path=None, parts=None):
+    def _get_xapian_query(self, querys, database=None, db_path=None, parts=None):
         """ convert to xapian query 
         """
         if database is None:
@@ -198,16 +222,18 @@ class Zapian(Schema):
         qp.set_default_op(xapian.Query.OP_AND)
 
         # parse filters
+        if not querys:
+            return xapian.Query('')
+
         queries = []
-        for filters in query['filters']:
+        for filters in querys:
             field, value, op = filters
             if op == 'parse':
                 _queries = []
                 for f in field:
                     prefix = self.get_prefix(f, auto_add=False)
-                    new_value = value
                     # 搜索支持部分匹配
-                    _queries.append( qp.parse_query(new_value, xapian.QueryParser.FLAG_WILDCARD, prefix) )
+                    _queries.append( qp.parse_query(value, xapian.QueryParser.FLAG_WILDCARD, prefix) )
 
                 query = xapian.Query(xapian.Query.OP_OR, _queries)
 
@@ -242,7 +268,7 @@ class Zapian(Schema):
 
         return combined
 
-    def search(self, parts, query, orderby=None, start=0, stop=0):
+    def search(self, parts, query=None, orderby=None, start=None, stop=None):
         """ 搜索, 返回document id的集合 
 
         如果parts为空，会对此catalog的所有索引进行搜索。
@@ -262,7 +288,7 @@ class Zapian(Schema):
                 orderby = orderby[1:]
 
             slotnum = self.get_slot(orderby, auto_add=False)
-            if not slotnum:
+            if slotnum is None:
                 raise Exception("Field %r was not indexed for sorting" % orderby)
 
             # Note: we invert the "asc" parameter, because xapian treats
@@ -274,6 +300,8 @@ class Zapian(Schema):
         enquire.set_docid_order(enquire.DONT_CARE)
 
         # Repeat the search until we don't get a DatabaseModifiedError
+        if start is None: start = 0
+        if stop is None: stop = database.get_doccount()
         while True:
             try:
                 matches = enquire.get_mset(start, stop)
@@ -334,7 +362,7 @@ class Zapian(Schema):
             return xapian.Query('')
 
         slot = self.get_slot(field, auto_add=False)
-        if not slot:
+        if slot is None:
             # Return a "match nothing" query
             return xapian.Query()
 
@@ -347,29 +375,6 @@ class Zapian(Schema):
             return xapian.Query(xapian.Query.OP_VALUE_GE, slot, begin)
 
         return xapian.Query(xapian.Query.OP_VALUE_RANGE, slot, begin, end)
-
-def _get_document(db, uid):
-    """Get the document with the specified unique ID.
-
-    Raises a KeyError if there is no such document.  Otherwise, it returns
-    a ProcessedDocument.
-
-    """
-    postlist = db.postlist('Q' + uid)
-    try:
-        plitem = postlist.next()
-    except StopIteration:
-        # Unique ID not found
-        raise KeyError('Unique ID %r not found' % uid)
-    try:
-        postlist.next()
-        raise Exception("Multiple documents " #pragma: no cover
-                                   "found with same unique ID")
-    except StopIteration:
-        # Only one instance of the unique ID found, as it should be.
-        pass
-
-    return db.get_document(plitem.docid)
 
 _write_database_index = {}
 def _get_write_db(db_path, part_name, protocol=''):

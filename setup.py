@@ -12,7 +12,7 @@ setup (
     author_email = "dev@zopen.cn",
     description = "indexer addons: sort, cjksplitter, and so on",
     long_description=(
-        read('readme.md')
+        read('README.md')
         ),
     license = "Private",
     keywords = "zope3 z3c rpc  server client",

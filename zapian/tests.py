@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime
 
-from api import Zapian, _get_read_db, _get_document
+from api import Zapian
 
 class ZapianTest(unittest.TestCase):
 
@@ -65,7 +65,7 @@ class ZapianTest(unittest.TestCase):
                 index=self.doc, data={'data': "测试内容"},
                 flush=True)
         # test value of the new document
-        doc = _get_document(_get_read_db(self.data_root, [part]), uid)
+        doc = self.zapian.get_document([part], uid)
         for value in doc.values():
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
@@ -99,7 +99,7 @@ class ZapianTest(unittest.TestCase):
 
         self.zapian.update_document(part, uid=uid, index=new_doc, flush=True)
         # test value of the new document
-        doc = _get_document(_get_read_db(self.data_root, [part]), uid)
+        doc = self.zapian.get_document([part], uid)
         for value in doc.values():
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
@@ -134,7 +134,7 @@ class ZapianTest(unittest.TestCase):
 
         self.zapian.replace_document(part, uid=uid, index=new_doc, flush=True)
         # test value of the new document
-        doc = _get_document(_get_read_db(self.data_root, [part]), uid)
+        doc = self.zapian.get_document([part], uid)
         for value in doc.values():
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
@@ -167,7 +167,7 @@ class ZapianTest(unittest.TestCase):
         self.zapian.delete_document(part, uids=[uid], flush=True)
         # test get the document, it will be raise KeyError
         try:
-            _get_document(_get_read_db(self.data_root, [part]), uid)
+            self.zapian.get_document([part], uid)
             raise AssertionError("Unique ID '%s' is exists" % uid)
         except KeyError:
             pass
@@ -180,11 +180,11 @@ class ZapianTest(unittest.TestCase):
                 index=self.doc, data={'data': "测试内容"},
                 flush=True)
         # serach
-        query = {'filters': [  
-                                                [[u'title'], u'we', u'parse'],
-                                                [u'subjects', u'file ktv', u'anyof'],
-                                ] }
-        results = self.zapian.search([part], query, start=0, stop=10)
+        query = [  
+                    [[u'title'], u'we', u'parse'],
+                    [u'subjects', u'file ktv', u'anyof'],
+                ] 
+        results = self.zapian.search([part], query)
         self.assertEqual([uid], results)
 
     def test_search_document_for_mulit_database(self):
@@ -215,27 +215,27 @@ class ZapianTest(unittest.TestCase):
         # search for muilt database
 
         # search firrst document
-        query = {'filters': [  
-                                                [[u'title'], u'we', u'parse'],
-                                                [u'subjects', u'file ktv', u'anyof'],
-                                ] }
-        results = self.zapian.search(self.parts, query, start=0, stop=10)
+        query = [  
+                    [[u'title'], u'we', u'parse'],
+                    [u'subjects', u'file ktv', u'anyof'],
+                 ] 
+        results = self.zapian.search(self.parts, query)
         self.assertEqual([first_uid], results)
 
         # search second document
-        query = {'filters': [  
-                                                [[u'title'], u'Go', u'parse'],
-                                                [u'subjects', u'walking sport', u'anyof'],
-                                ] }
-        results = self.zapian.search(self.parts, query, start=0, stop=10)
+        query = [  
+                    [[u'title'], u'Go', u'parse'],
+                    [u'subjects', u'walking sport', u'anyof'],
+                ]
+        results = self.zapian.search(self.parts, query)
         self.assertEqual([second_uid], results)
 
         # search two document
-        query = {'filters': [  
-                                                [u'title', u'Go we', u'anyof'],
-                                                [u'subjects', u'walking sport ktv', u'anyof'],
-                                ] }
-        results = self.zapian.search(self.parts, query, start=0, stop=10)
+        query = [  
+                    [u'title', u'Go we', u'anyof'],
+                    [u'subjects', u'walking sport ktv', u'anyof'],
+                ]
+        results = self.zapian.search(self.parts, query)
         self.assertEqual(len(results), 2)
         self.assertEqual(set([first_uid, second_uid]), set(results))
 
