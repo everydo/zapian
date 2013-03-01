@@ -41,7 +41,7 @@ def print_documents(conn, start, limit):
     print "--"*30
     for res in results:
         print '-----------'
-        print "data: %s\t%s\t" % (res.id, res.rank), "; ".join([ "%s: %s" % (k, ",".join(v)) for k, v in res.data.items()]) 
+        print "data: %s\t%s\t" % (res.id, res.rank), "; ".join([ "%s: %s" % (k, v) for k, v in res.data.items()]) 
         print 'value:    ', '; '.join([ str(value.num) + ':' + value.value for value in res._doc.values()])
         print 'term:    ', '; '.join([ value.term for value in res._doc.termlist()])
 

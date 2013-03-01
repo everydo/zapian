@@ -19,10 +19,9 @@ _qp_flags_bool = xapian.QueryParser.FLAG_BOOLEAN
 
 class Zapian(Schema):
 
-    parts = []
-
     def __init__(self, db_path):
         self.db_path = db_path
+        self.parts = [] 
         super(self.__class__, self).__init__(db_path)
 
         for part_name in os.listdir(db_path):
@@ -32,7 +31,11 @@ class Zapian(Schema):
         """ add xapian a database """
         part_path = os.path.join(self.db_path, part_name)
         if os.path.isdir(part_path):
-            self.parts.append(part_path)
+            self.parts.append(part_name)
+
+    def release_part(self, part_name):
+        """ release xapian a database """
+        _release_write_db(self.db_path, part_name)
 
     def remove_part(self, part_name):
         """ remove xapian a database """
@@ -175,21 +178,26 @@ class Zapian(Schema):
         db = _get_write_db(self.db_path, part_name)
 
         identifier = u'Q' + str(uid)
-        old_doc = self.get_document([part_name], str(uid))
+        old_doc = self._get_document(str(uid), [part_name])
 
         new_doc = self.get_interior_doc(index, data=data, xap_doc=old_doc)
         
         db.replace_document(identifier, new_doc)
         if flush: db.commit()
 
-    def get_document(self, part, uid):
-        """Get the document with the specified unique ID.
+    def get_document(self, uid, part=None):
+        """ Get the document """
+        xap_doc = self._get_document(uid, part)
+        return pickle.loads( xap_doc.get_data() )
+
+    def _get_document(self, uid, part=None):
+        """Get the xapian document object with the specified unique ID.
 
         Raises a KeyError if there is no such document.  Otherwise, it returns
         a ProcessedDocument.
 
         """
-        db = _get_read_db(self.db_path, part)
+        db = _get_read_db(self.db_path, part or self.parts)
         postlist = db.postlist('Q' + uid)
         try:
             plitem = postlist.next()
@@ -268,10 +276,11 @@ class Zapian(Schema):
 
         return combined
 
-    def search(self, parts, query=None, orderby=None, start=None, stop=None):
+    def search(self, parts=None, query=None, orderby=None, start=None, stop=None):
         """ 搜索, 返回document id的集合 
 
         如果parts为空，会对此catalog的所有索引进行搜索。
+        如果query为空，默认返回全部结果
         """
         database = _get_read_db(self.db_path, parts=parts or self.parts)
         xapian_query = self._get_xapian_query(query, database=database)
@@ -391,6 +400,13 @@ def _get_write_db(db_path, part_name, protocol=''):
         _write_database_index[part_path] = db
         return db
 
+def _release_write_db(db_path, part_name, protocol=''):
+    """ """
+    part_path = os.path.join(db_path, part_name)
+    if part_path in _write_database_index:
+        _write_database_index[part_path].close()
+        del _write_database_index[part_path]
+
 def _get_read_db(db_path, parts, protocol=''):
     """ get xapian readonly database
         protocol: the future maybe support.
@@ -421,7 +437,7 @@ def _query_parse_with_fallback(qp, string, prefix=None):
                                        _qp_flags_synonym |
                                        _qp_flags_bool,
                                        prefix)
-    except xapian.QueryParserError, e:
+    except xapian.QueryParserError:
         # If we got a parse error, retry without boolean operators (since
         # these are the usual cause of the parse error).
         q1 = _query_parse_with_prefix(qp, string,
@@ -436,7 +452,7 @@ def _query_parse_with_fallback(qp, string, prefix=None):
                                            _qp_flags_base |
                                            _qp_flags_bool,
                                            prefix)
-    except xapian.QueryParserError, e:
+    except xapian.QueryParserError:
         # If we got a parse error, retry without boolean operators (since
         # these are the usual cause of the parse error).
         q2 = _query_parse_with_prefix(qp, string,

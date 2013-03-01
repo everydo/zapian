@@ -65,7 +65,7 @@ class ZapianTest(unittest.TestCase):
                 index=self.doc, data={'data': "测试内容"},
                 flush=True)
         # test value of the new document
-        doc = self.zapian.get_document([part], uid)
+        doc = self.zapian._get_document(uid, [part])
         for value in doc.values():
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
@@ -99,7 +99,7 @@ class ZapianTest(unittest.TestCase):
 
         self.zapian.update_document(part, uid=uid, index=new_doc, flush=True)
         # test value of the new document
-        doc = self.zapian.get_document([part], uid)
+        doc = self.zapian._get_document(uid, [part])
         for value in doc.values():
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
@@ -134,7 +134,7 @@ class ZapianTest(unittest.TestCase):
 
         self.zapian.replace_document(part, uid=uid, index=new_doc, flush=True)
         # test value of the new document
-        doc = self.zapian.get_document([part], uid)
+        doc = self.zapian._get_document(uid, [part])
         for value in doc.values():
             if value.num == 0:
                 self.assertEqual(value.value, '946656000')
@@ -167,7 +167,7 @@ class ZapianTest(unittest.TestCase):
         self.zapian.delete_document(part, uids=[uid], flush=True)
         # test get the document, it will be raise KeyError
         try:
-            self.zapian.get_document([part], uid)
+            self.zapian._get_document(uid, [part])
             raise AssertionError("Unique ID '%s' is exists" % uid)
         except KeyError:
             pass
