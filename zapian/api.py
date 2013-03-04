@@ -282,6 +282,16 @@ class Zapian(Schema):
         如果parts为空，会对此catalog的所有索引进行搜索。
         如果query为空，默认返回全部结果
         """
+        if parts is None:
+            parts = self.parts
+
+        for part_name in parts:
+            if not os.path.exists(os.path.join(self.db_path, part_name)):
+                parts.remove(part_name)
+
+        if not parts:
+            return []
+
         database = _get_read_db(self.db_path, parts=parts or self.parts)
         xapian_query = self._get_xapian_query(query, database=database)
         enquire = xapian.Enquire(database)
