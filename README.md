@@ -91,4 +91,11 @@ xapian内部对数据有三种用途：term索引、排序字段、返回data；
 2. attribute存放的slot位置: 
 
       slots:{'modified':1, 'created':2}
+      
+安装xapian依赖
+=========================
+
+Ubuntu:
+    
+    sudo apt-get install python-xapian
 
