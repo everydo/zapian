@@ -31,7 +31,6 @@ setup (
     namespace_packages= [],
     install_requires = [
         'setuptools',
-        'xapian',
         'PyYAML'
         ],
     zip_safe = False,
