@@ -10,7 +10,7 @@ zapian: schemaless python interface to Xapian
 欢迎拍砖： http://weibo.com/panjunyong
 
 特性
-=============
+-------------------------------------
 
 - 为xapian提供更友好的schemaless的api
 - 支持分区索引：可单独指定分区搜索，或合并搜索
@@ -19,7 +19,8 @@ zapian: schemaless python interface to Xapian
   - 根据数据存放区域进行分区
 
 Schemaless API
-====================
+-------------------------------------
+
 首先需要初始化数据库:
 
       db = Zapian(path='/tmp/test_zapian_db')
@@ -66,7 +67,8 @@ Schemaless API
 
 
 doc和索引的关系
-=======================
+-------------------------------------
+
 xapian内部对数据有三种用途：term索引、排序字段、返回data；系统自动对数据类型进行处理：
 
 - set/list/tuple：对每个包含数据，完整匹配搜索(term索引)
@@ -75,7 +77,8 @@ xapian内部对数据有三种用途：term索引、排序字段、返回data；
 - 如果字符串类型的字段以 + 开头，表示除了全文索引，也会用于排序
 
 数据库的结构
-===================
+-------------------------------------
+
 数据库存放在文件夹结构：
 
           schema.yaml   # 库结构信息
@@ -93,9 +96,7 @@ xapian内部对数据有三种用途：term索引、排序字段、返回data；
       slots:{'modified':1, 'created':2}
       
 安装xapian依赖
-=========================
+-------------------------------------
 
-Ubuntu:
-    
-    sudo apt-get install python-xapian
+http://xapian.org/download
 
