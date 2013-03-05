@@ -95,8 +95,8 @@ xapian内部对数据有三种用途：term索引、排序字段、返回data；
 
       slots:{'modified':1, 'created':2}
       
-安装xapian依赖
+安装使用
 -------------------------------------
 
-http://xapian.org/download
-
+1. 需要先安装xapian：http://xapian.org/download
+2. 直接在pypi上安装这个包： https://pypi.python.org/pypi/zapian
