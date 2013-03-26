@@ -7,7 +7,7 @@ def read(*rnames):
 
 setup (
     name='zapian',
-    version='0.1.1dev',
+    version='0.1.2dev',
     author = "Pan Junyong",
     author_email = "dev@zopen.cn",
     description = "indexer addons: sort, cjksplitter, and so on",
@@ -17,11 +17,9 @@ setup (
     license = "Private",
     keywords = "zope3 z3c rpc  server client",
     classifiers = [
-        'Development Status :: 4 - Alpha',
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
         'Programming Language :: Python',
-        'Natural Language :: Chinese',
         'Operating System :: OS Independent',
         'Topic :: Internet :: WWW/HTTP',
         'Framework :: Zope3'],
