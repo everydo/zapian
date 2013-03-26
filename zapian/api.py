@@ -85,10 +85,15 @@ class Zapian(Schema):
                 # 移除旧的term
                 if xap_doc and prefix not in removed_prefix:
                     termlist = xap_doc.termlist()
-                    term = termlist.skip_to(prefix)
-                    while 1:
+
+                    try:
+                        term = termlist.skip_to(prefix)
+                        has_old_term = True
+                    except:
+                        has_old_term = False
+
+                    while has_old_term:
                         if term.term.startswith(prefix):
-                        #if term.term[:2] == prefix:
                             document.remove_term(term.term)
                         else:
                             break
@@ -96,6 +101,7 @@ class Zapian(Schema):
                             term = termlist.next()
                         except StopIteration:
                             break
+
                 removed_prefix.add(prefix)
 
                 if types == 'exact':
