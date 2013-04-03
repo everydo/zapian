@@ -47,7 +47,7 @@ class Zapian(Schema):
         else:
             raise Exception('remove database: %s is not xapian database'%part_path)
 
-    def get_interior_doc(self, doc, data=None, xap_doc=None):
+    def get_interior_doc(self, doc, data=None, old_doc=None):
         """ convert python dict into xapian document object
             doc: 
                {field1:value1, 
@@ -57,95 +57,95 @@ class Zapian(Schema):
 
             return: xapian document object
         """
-        document = xap_doc or xapian.Document()
+        def _add_term(doc, termgen, prefix, value):
+            types = 'freetext'
+
+            if types == 'exact':
+                if len(value) > 0:
+                    # We use the following check, rather than "isupper()" to ensure
+                    # that we match the check performed by the queryparser, regardless
+                    # of our locale.
+                    if ord(value[0]) >= ord('A') and ord(value[0]) <= ord('Z'):
+                        prefix = prefix + ':'
+
+                # Note - xapian currently restricts term lengths to about 248
+                # characters - except that zero bytes are encoded in two bytes, so
+                # in practice a term of length 125 characters could be too long.
+                # Xapian will give an error when commit() is called after such
+                # documents have been added to the database.
+                # As a simple workaround, we give an error here for terms over 220
+                # characters, which will catch most occurrences of the error early.
+                #
+                # In future, it might be good to change to a hashing scheme in this
+                # situation (or for terms over, say, 64 characters), where the
+                # characters after position 64 are hashed (we obviously need to do this
+                # hashing at search time, too).
+                if len(prefix + value) > 220:
+                    raise Exception("Field is too long: maximum length "
+                                               "220 - was %d (%r)" %
+                                               (len(prefix + value),
+                                                prefix + value))
+
+
+                doc.add_term(prefix + value, 1) # wdfinc default set 1
+
+            elif types == 'freetext':
+                # no positions, weight default set 1
+                termgen.index_text_without_positions(str(value), 1, prefix)
+                termgen.increase_termpos(10)
+
+        def _add_value(doc, slotnum, value):
+
+            if isinstance(value, float):
+                value = xapian.sortable_serialise(float(value))
+                doc.add_value(int(slotnum), value)
+            else:
+                doc.add_value(int(slotnum), str(value))
+
+        document = xapian.Document()
         termgen = xapian.TermGenerator()
         termgen.set_document(document)
 
-        removed_prefix = set()
-        # new value will be replace old value
+        terms = set()
+        values = set()
+        # build new xapian object
         for field, value in doc.iteritems():
-
             # sortable
             if isinstance(value, (int, float, datetime)):
-                value = clean_value(value)
-
+                if field in values:
+                    continue
                 slotnum = self.get_slot(field)
-                if isinstance(value, float):
-                    value = xapian.sortable_serialise(float(value))
-                    document.add_value(int(slotnum), value)
-                else:
-                    document.add_value(int(slotnum), str(value))
-
+                value = clean_value(value)
+                _add_value(document, slotnum, value)
+                values.add(slotnum)
             # field
             else:
-                value = clean_value(value)
+                if field in terms:
+                    continue
                 prefix = self.get_prefix(field)
-                types = 'freetext'
+                value = clean_value(value)
+                _add_term(document, termgen, prefix, value)
+                terms.add(prefix)
 
-                # 移除旧的term
-                if xap_doc and prefix not in removed_prefix:
-                    termlist = xap_doc.termlist()
+        # new value will be replace old value
+        if old_doc is not None:
+            for term in old_doc.termlist():
+                prefix, value = self.split_term(term.term)
+                if prefix not in terms:
+                    _add_term(document, termgen, prefix, value)
 
-                    try:
-                        term = termlist.skip_to(prefix)
-                        has_old_term = True
-                    except:
-                        has_old_term = False
+            for value in old_doc.values():
+                if value.num not in values:
+                    _add_value(document, value.num, value)
 
-                    while has_old_term:
-                        if term.term.startswith(prefix):
-                            document.remove_term(term.term)
-                        else:
-                            break
-                        try:
-                            term = termlist.next()
-                        except StopIteration:
-                            break
-
-                removed_prefix.add(prefix)
-
-                if types == 'exact':
-                    if len(value) > 0:
-                        # We use the following check, rather than "isupper()" to ensure
-                        # that we match the check performed by the queryparser, regardless
-                        # of our locale.
-                        if ord(value[0]) >= ord('A') and ord(value[0]) <= ord('Z'):
-                            prefix = prefix + ':'
-
-                    # Note - xapian currently restricts term lengths to about 248
-                    # characters - except that zero bytes are encoded in two bytes, so
-                    # in practice a term of length 125 characters could be too long.
-                    # Xapian will give an error when commit() is called after such
-                    # documents have been added to the database.
-                    # As a simple workaround, we give an error here for terms over 220
-                    # characters, which will catch most occurrences of the error early.
-                    #
-                    # In future, it might be good to change to a hashing scheme in this
-                    # situation (or for terms over, say, 64 characters), where the
-                    # characters after position 64 are hashed (we obviously need to do this
-                    # hashing at search time, too).
-                    if len(prefix + value) > 220:
-                        raise Exception("Field %r is too long: maximum length "
-                                                   "220 - was %d (%r)" %
-                                                   (field, len(prefix + value),
-                                                    prefix + value))
-
-
-                    document.add_term(prefix + value, 1) # wdfinc default set 1
-
-                elif types == 'freetext':
-                    # no positions, weight default set 1
-                    termgen.index_text_without_positions(str(value), 1, prefix)
-                    termgen.increase_termpos(10)
-
-        # data
-        if data is not None:
-            if xap_doc:
-                old_data = pickle.loads(xap_doc.get_data())
-                old_data.update(data)
-                document.set_data(pickle.dumps(old_data))
-            else:
-                document.set_data(pickle.dumps(data))
+            if data is None: data = dict()
+            old_data = pickle.loads(old_doc.get_data())
+            for k, v in old_data.iteritems():
+                if k not in data:
+                    data[k] = v
+        # add data
+        if data:
+            document.set_data(pickle.dumps(data))
 
         return document
 
@@ -186,7 +186,7 @@ class Zapian(Schema):
         identifier = u'Q' + str(uid)
         old_doc = self._get_document(str(uid), [part_name])
 
-        new_doc = self.get_interior_doc(index, data=data, xap_doc=old_doc)
+        new_doc = self.get_interior_doc(index, data=data, old_doc=old_doc)
         
         db.replace_document(identifier, new_doc)
         if flush: db.commit()

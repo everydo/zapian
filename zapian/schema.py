@@ -62,7 +62,7 @@ class Schema(object):
         count = len(self.fields) + 1
         multiple = count/24
         index = count % 24
-        return 'X' + 'A'*multiple + chr(index+64)
+        return 'X' + '@'*multiple + chr(index+64)
 
     def add_attribute(self, name):
         if name not in self.attributes:
@@ -75,4 +75,20 @@ class Schema(object):
     def _gen_slot(self):
         """ new slot """
         return len(self.attributes) 
+
+    def split_term(self, term):
+        if term[0] == 'Q':
+            return 'Q', term[1:]
+
+        if term[0] != 'X':
+            return '', term
+
+        for index in range(1, len(term)):
+            if term[index] != '@':
+                break
+        index += 1
+
+        return term[:index], term[index:]
+
+
 
