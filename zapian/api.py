@@ -6,6 +6,9 @@ import os
 import shutil
 import xapian
 import cPickle as pickle
+import time
+import hashlib
+from threading import local
 from datetime import datetime
 
 from utils import clean_value
@@ -423,19 +426,51 @@ def _release_write_db(db_path, part_name, protocol=''):
         _write_database_index[part_path].close()
         del _write_database_index[part_path]
 
+thread_context = local()
+thread_context.connection = {}
+thread_context.opened = {}
+thread_context.modified = {}
+READ_DB_REFRESH_DELTA = 2 # max time in seconds till we refresh a connection
 def _get_read_db(db_path, parts, protocol=''):
     """ get xapian readonly database
         protocol: the future maybe support.
     """
-    base_name = os.path.join(db_path, parts[0])
-    database = xapian.Database(base_name)
+    prefix = hashlib.md5(db_path + ''.join(parts)).hexdigest()
 
-    # 适用于多个数据库查询
-    for part_name in parts[1:]:
-        other_name = os.path.join(db_path, part_name)
-        database.add_database(xapian.Database(other_name))
+    conn = thread_context.connection.get(prefix, None)
+    now = time.time()
 
-    return database
+    if thread_context.modified.get(prefix, 0) + READ_DB_REFRESH_DELTA < now:
+        thread_context.modified[prefix] = now
+    
+    if conn is None:
+        base_name = os.path.join(db_path, parts[0])
+        conn = xapian.Database(base_name)
+
+        # 适用于多个数据库查询
+        for part_name in parts[1:]:
+            other_name = os.path.join(db_path, part_name)
+            conn.add_database(xapian.Database(other_name))
+        thread_context.connection[prefix] = conn 
+        thread_context.opened[prefix] = now
+            
+    opened = thread_context.opened.get(prefix, 0)
+
+    if opened < thread_context.modified[prefix]:
+        conn.reopen()
+        thread_context.opened[prefix] = now
+
+    return conn
+
+def _release_read_db(db_path, parts, protocol=''):
+    """ release the read db 
+        protocol: the future maybe support.
+    """
+    prefix = hashlib.md5(db_path + ''.join(parts)).hexdigest()
+    del thread_context.modified[prefix]
+    del thread_context.opened[prefix]
+    thread_context.connection[prefix].close()
+    del thread_context.connection[prefix]
 
 def _query_parse_with_prefix(qp, string, flags, prefix):
     """ """
