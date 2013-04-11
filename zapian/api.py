@@ -427,16 +427,21 @@ def _release_write_db(db_path, part_name, protocol=''):
         del _write_database_index[part_path]
 
 thread_context = local()
-thread_context.connection = {}
-thread_context.opened = {}
-thread_context.modified = {}
 READ_DB_REFRESH_DELTA = 2 # max time in seconds till we refresh a connection
 def _get_read_db(db_path, parts, protocol=''):
     """ get xapian readonly database
         protocol: the future maybe support.
     """
-    prefix = hashlib.md5(db_path + ''.join(parts)).hexdigest()
+    if not getattr(thread_context, 'connection', None):
+        thread_context.connection = {}
 
+    if not getattr(thread_context, 'modified', None):
+        thread_context.modified = {}
+
+    if not getattr(thread_context, 'opened', None):
+        thread_context.opened = {}
+
+    prefix = hashlib.md5(db_path + ''.join(parts)).hexdigest()
     conn = thread_context.connection.get(prefix, None)
     now = time.time()
 
