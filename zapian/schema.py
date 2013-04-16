@@ -8,12 +8,14 @@ CONFIG_FILE = 'schema.yaml'
 class Schema(object):
     """ The schema class is improve xapian fields
     """
-    fields = {}       # {'title': ’NS’ }
+    fields = None       # {'title': ’NS’ }
 
-    attributes = {}   # {'created':1 }
+    attributes = None   # {'created':1 }
 
     def __init__(self, db_path):
         self.db_path = db_path
+        self.fields = {}
+        self.attributes = {}
         self.load()
 
     def get_prefix(self, name, auto_add=True):
