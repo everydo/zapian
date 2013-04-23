@@ -152,12 +152,15 @@ class Zapian(Schema):
 
         return document
 
-    def add_document(self, part_name, uid, index, data=None, flush=True):
+    def add_document(self, part_name, index, uid=None, data=None, flush=True):
         """ add a xapian document
         """
-        doc = self.get_interior_doc(index, data=data)
-        identifier = u'Q' + str(uid)
         db = _get_write_db(self.db_path, part_name)
+        doc = self.get_interior_doc(index, data=data)
+        if not uid:
+            identifier = u'Q' + part_name + str(db.get_lastdocid())
+        else:
+            identifier = u'Q' + str(uid)
         doc.add_boolean_term(identifier)
         db.replace_document(identifier, doc)
         if flush: db.commit()
@@ -294,14 +297,15 @@ class Zapian(Schema):
         if parts is None:
             parts = self.parts
 
-        for part_name in parts:
-            if not os.path.exists(os.path.join(self.db_path, part_name)):
-                parts.remove(part_name)
+        else:
+            for part_name in parts:
+                if not os.path.exists(os.path.join(self.db_path, part_name)):
+                    parts.remove(part_name)
 
         if not parts:
             return []
 
-        database = _get_read_db(self.db_path, parts=parts or self.parts)
+        database = _get_read_db(self.db_path, parts=parts)
         xapian_query = self._get_xapian_query(query, database=database)
         enquire = xapian.Enquire(database)
         enquire.set_query(xapian_query)
