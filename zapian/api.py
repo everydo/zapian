@@ -210,21 +210,26 @@ class Zapian(Schema):
 
         """
         db = _get_read_db(self.db_path, part or self.parts)
-        postlist = db.postlist('Q' + uid)
-        try:
-            plitem = postlist.next()
-        except StopIteration:
-            # Unique ID not found
-            raise KeyError('Unique ID %r not found' % uid)
-        try:
-            postlist.next()
-            raise Exception("Multiple documents " #pragma: no cover
-                                       "found with same unique ID")
-        except StopIteration:
-            # Only one instance of the unique ID found, as it should be.
-            pass
+        while True:
+            try:
+                postlist = db.postlist('Q' + uid)
+                try:
+                    plitem = postlist.next()
+                except StopIteration:
+                    # Unique ID not found
+                    raise KeyError('Unique ID %r not found' % uid)
+                try:
+                    postlist.next()
+                    raise Exception("Multiple documents " #pragma: no cover
+                                               "found with same unique ID")
+                except StopIteration:
+                    # Only one instance of the unique ID found, as it should be.
+                    pass
 
-        return db.get_document(plitem.docid)
+                return db.get_document(plitem.docid)
+
+            except xapian.DatabaseModifiedError:
+                db.reopen()
 
     def commit(self, part_name):
         """ commit xapian database """
@@ -253,7 +258,8 @@ class Zapian(Schema):
                 for f in field:
                     prefix = self.get_prefix(f, auto_add=False)
                     # 搜索支持部分匹配
-                    _queries.append( qp.parse_query(value, xapian.QueryParser.FLAG_WILDCARD, prefix) )
+                    new_value = clean_value(value)
+                    _queries.append( qp.parse_query(new_value, xapian.QueryParser.FLAG_WILDCARD, prefix) )
 
                 query = xapian.Query(xapian.Query.OP_OR, _queries)
 
