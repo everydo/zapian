@@ -27,11 +27,7 @@ class Zapian(Schema):
         self.parts = [] 
         super(self.__class__, self).__init__(db_path)
 
-        parts = os.listdir(self.db_path)
-        if 'schema.yaml' not in parts:
-            raise InvalidDatabaseError('%s is invalid zapian database' % db_path)
-
-        for part_name in parts:
+        for part_name in os.listdir(self.db_path):
             self.add_part(part_name)
 
     def add_part(self, part_name):
@@ -304,6 +300,9 @@ class Zapian(Schema):
         如果parts为空，会对此catalog的所有索引进行搜索。
         如果query为空，默认返回全部结果
         """
+        # 这个目录不一个正确的数据库，可能还没有保存至少一条数据
+        if 'schema.yaml' not in os.listdir(self.db_path):
+            return []
 
         if parts is None:
             parts = self.parts
@@ -557,5 +556,3 @@ def normalize_range(begin, end):
             end = str(end)
     return begin, end
 
-class InvalidDatabaseError(Exception):
-    pass
