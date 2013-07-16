@@ -9,13 +9,13 @@ LIST_TYPES = (set, list, tuple)
 STRING_TYPES = (str, unicode)
 DATE_TYPES = (datetime, int, float)
 
-def clean_value(value):
+def clean_value(value, is_query=False):
     """ convert value 
     """
     if isinstance(value, LIST_TYPES):
         return clean_list(value)
     elif isinstance(value, STRING_TYPES):
-        return clean_splitter(value)
+        return clean_splitter(value, is_query=is_query)
     elif isinstance(value, DATE_TYPES):
         return clean_date(value)
     else:

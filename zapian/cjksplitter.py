@@ -1,8 +1,8 @@
-#coding=utf8
+# -*- encoding: utf-8 -*-
 """
 CJKSplitter - Chinese, Japanese, Korean word splitter for ZCTextIndex
 
-(C) by www.ZopeChina.com, panjy@zopechina.com & others
+(C) by www.zopen.cn, panjy@zopen.cn & others
 
 License: see LICENSE.txt
 
@@ -26,14 +26,14 @@ DESCRIPTION OF ALGORITHM
   in the same manner, and since the set of characters is huge so the
   extra matches are not significant.
 """
-try:
-    from Products.ZCTextIndex.ISplitter import ISplitter
-    from Products.ZCTextIndex.PipelineFactory import element_factory
-except:
-    pass
+#try:
+#    from Products.ZCTextIndex.ISplitter import ISplitter
+#    from Products.ZCTextIndex.PipelineFactory import element_factory
+#except:
+#    pass
+#from types import StringType
 
 import re
-from types import StringType
 
 def getSupportedEncoding(encodings):
     for encoding in encodings:
@@ -52,24 +52,49 @@ def getSupportedEncoding(encodings):
 # http://jrgraphix.net/research/unicode_blocks.php?block=76
 # http://jrgraphix.net/research/unicode_blocks.php?block=90
 
-rxNormal = re.compile(u"[a-zA-Z0-9_]+|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af]+", re.UNICODE)
-rxGlob = re.compile(u"[a-zA-Z0-9_]+[*?]*|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af]+[*?]*", re.UNICODE)
+# more to support:
+# \u30a1-\u30f6 : Japanese Katakana
+# \uff10-\uff19 : full-width number
+# \uff21-\uff3a : full-width alphabete
+# \uff41-\uff5a
+# (done) \u0392-\u03c9 : greek.
 
-class CJKSplitter:
+norm_table = {'　':' '}
 
-    default_encoding = "utf-8"
+for char_ord in range(ord(u'Ａ'), ord(u'Ｚ')+1):
+    norm_table[unichr(char_ord)] = unichr(ord('A') + char_ord - ord(u'Ａ'))
+for char_ord in range(ord(u'ａ'), ord(u'ｚ')+1):
+    norm_table[unichr(char_ord)] = unichr(ord('a') + char_ord - ord(u'ａ'))
+for char_ord in range(ord(u'０'), ord(u'９')+1):
+    norm_table[unichr(char_ord)] = unichr(ord('0') + char_ord - ord(u'０'))
 
-    def process(self, lst, isGlob=0):
+rxNormal = re.compile(u"[a-zA-Z0-9_\u0392-\u03c9]+|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af]+", re.UNICODE)
+rxGlob = re.compile(u"[a-zA-Z0-9_\u0392-\u03c9]+[*?]*|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af]+[*?]*", re.UNICODE)
+
+class CJKSplitter(object):
+
+    def process(self, lst, isGlob=0, deep_split_english=False):
         result = []
         if isGlob:
           rx = rxGlob
         else:
           rx = rxNormal
         for s in lst:
-            if type(s) is StringType: # not unicode
-                s = unicode(s, self.default_encoding, 'ignore')
+            # s must be unicode!
+
+            # normalize
+            new_s = []
+            for char in s:
+                if char in norm_table:
+                    new_s.append(norm_table[char])
+                else:
+                    new_s.append(char)
+            s = ''.join(new_s)
+
             splitted = rx.findall(s)
             for w in splitted:
+
+
                 if ord(w[0]) >= 12352:  # \u3040
                     len_w = len(w)
                     if len_w == 1:
@@ -79,7 +104,7 @@ class CJKSplitter:
                             result.append(w )
                     elif len_w == 2:
                         result.append(w)
-                        # XXX here, we may lost some index, duto ZCTextIndex's phrase process
+                        # XXX here, we may lost some index, due to ZCTextIndex's phrase process
                         # ZCTextIndex will check each processGlob 'ed words again. And it doesn't
                         # work with CJKSplitter. It will break the search term
                         # so I have to comment the 2 lines.
@@ -92,33 +117,59 @@ class CJKSplitter:
                             # result.append(w[i-1:i+1])
                             i += 1
 
-                        # add the last word to the catalog
-			if not isGlob:
+                        if not isGlob:
                             result.append(w[-1])
                 else:
-                    result.append(w)
+                    if deep_split_english:
+                        # title 进索引的时候，只要把英文和数字分词就行
+                        result.extend(self.__process_one_word(w))
+                    else:
+                        # title 搜索关键字，不需要分词，但是要在最后加上*，以便支持模糊搜索
+                        result.append(w if not isGlob else w + '*')
         # return [word.encode('utf8') for word in result]
         return result
 
     def processGlob(self, lst):
         return self.process(lst, 1)
 
-gb_encoding = getSupportedEncoding(['gb18030', 'mbcs', 'gbk', 'gb2312']) 
-class GBSplitter(CJKSplitter):
-    default_encoding = gb_encoding
+    def __process_one_word(self, word):
+        """ 英文数字分词 """
+        word_list = list(word)
+        word_len = len(word_list)
 
-big5_encoding = getSupportedEncoding(['big5', 'mbcs'])
-class BIG5Splitter(CJKSplitter):
-    default_encoding = big5_encoding
+        ### 只有一位或者两位
+        if word_len <= 2:
+            return [word]
 
-try:
-    element_factory.registerFactory('Word Splitter',
-          'CJK splitter', CJKSplitter)
-    element_factory.registerFactory('Word Splitter',
-          'CJK GB splitter', GBSplitter)
-    element_factory.registerFactory('Word Splitter',
-          'CJK BIG5 splitter', BIG5Splitter)
-except:# ValueError:
-    # in case the splitter is already registered, ValueError is raised
-    pass
+        ### 大于两位
+
+        results = []
+        result = word_list
+        results.append(''.join(word_list))
+
+        # abcd
+        # bcd
+        # bc
+        # 每次让前面pop出一位, 直到只剩下两位
+        while 1:
+            result.pop(0)
+            results.append(''.join(result))
+            if len(result) <= 2: break
+
+        return results
+
+if __name__ == '__main__':
+   words = ['我们abs非常好ddd ａｂｃ　ｄｅｆ',
+        u'"我们非常好 1212* 有033212-1" and niubi' ,]
+
+   for word in words:
+       print '=====now test:', word
+       s = CJKSplitter()
+       print 'no glob result:'
+       for i in s.process([word], deep_split_english=True):
+           print i
+
+       print 'glob result:'
+       for i in s.processGlob([word]):
+           print i
 

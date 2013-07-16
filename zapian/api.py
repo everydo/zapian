@@ -3,35 +3,34 @@
 """
 
 import os
+import gc
 import shutil
 import xapian
-import cPickle as pickle
 import time
 import hashlib
+import cPickle as pickle
 from threading import local
 from datetime import datetime
 
+from query import Query
 from utils import clean_value
-from schema import Schema
+from schema import Schema, CONFIG_FILE
 
-_qp_flags_base = xapian.QueryParser.FLAG_LOVEHATE
-_qp_flags_phrase = xapian.QueryParser.FLAG_PHRASE
-_qp_flags_synonym = (xapian.QueryParser.FLAG_AUTO_SYNONYMS |
-                     xapian.QueryParser.FLAG_AUTO_MULTIWORD_SYNONYMS)
-_qp_flags_bool = xapian.QueryParser.FLAG_BOOLEAN
-
-class Zapian(Schema):
+class Zapian(object):
 
     def __init__(self, db_path):
         self.db_path = db_path
         self.parts = [] 
-        super(self.__class__, self).__init__(db_path)
-
         for part_name in os.listdir(self.db_path):
             self.add_part(part_name)
 
+        self.schema = Schema(db_path)
+
     def add_part(self, part_name):
         """ add xapian a database """
+        if part_name in self.parts:
+            return 
+
         part_path = os.path.join(self.db_path, part_name)
         if os.path.isdir(part_path):
             self.parts.append(part_name)
@@ -61,9 +60,9 @@ class Zapian(Schema):
             return: xapian document object
         """
         def _add_term(doc, termgen, prefix, value):
-            types = 'freetext'
+            type_name = 'freetext'
 
-            if types == 'exact':
+            if type_name == 'exact':
                 if len(value) > 0:
                     # We use the following check, rather than "isupper()" to ensure
                     # that we match the check performed by the queryparser, regardless
@@ -92,7 +91,7 @@ class Zapian(Schema):
 
                 doc.add_term(prefix + value, 1) # wdfinc default set 1
 
-            elif types == 'freetext':
+            elif type_name == 'freetext':
                 # no positions, weight default set 1
                 termgen.index_text_without_positions(str(value), 1, prefix)
                 termgen.increase_termpos(10)
@@ -117,7 +116,7 @@ class Zapian(Schema):
             if isinstance(value, (int, float, datetime)):
                 if field in values:
                     continue
-                slotnum = self.get_slot(field)
+                slotnum = self.schema.get_slot(field)
                 value = clean_value(value)
                 _add_value(document, slotnum, value)
                 values.add(slotnum)
@@ -125,7 +124,7 @@ class Zapian(Schema):
             else:
                 if field in terms:
                     continue
-                prefix = self.get_prefix(field)
+                prefix = self.schema.get_prefix(field)
                 value = clean_value(value)
                 _add_term(document, termgen, prefix, value)
                 terms.add(prefix)
@@ -133,7 +132,7 @@ class Zapian(Schema):
         # new value will be replace old value
         if old_doc is not None:
             for term in old_doc.termlist():
-                prefix, value = self.split_term(term.term)
+                prefix, value = self.schema.split_term(term.term)
                 if prefix not in terms:
                     _add_term(document, termgen, prefix, value)
 
@@ -141,11 +140,15 @@ class Zapian(Schema):
                 if value.num not in values:
                     _add_value(document, value.num, value)
 
-            if data is None: data = dict()
-            old_data = pickle.loads(old_doc.get_data())
-            for k, v in old_data.iteritems():
-                if k not in data:
-                    data[k] = v
+            if data is None: 
+                data = dict()
+
+            old_data = old_doc.get_data()
+            if old_data:
+                old_data = pickle.loads(old_data)
+                for k, v in old_data.iteritems():
+                    if k not in data:
+                        data[k] = v
         # add data
         if data:
             document.set_data(pickle.dumps(data))
@@ -190,7 +193,7 @@ class Zapian(Schema):
         db = _get_write_db(self.db_path, part_name)
 
         identifier = u'Q' + str(uid)
-        old_doc = self._get_document(str(uid), [part_name])
+        old_doc = self._get_document(str(uid), [part_name], db=db)
 
         new_doc = self.get_interior_doc(index, data=data, old_doc=old_doc)
         
@@ -202,14 +205,16 @@ class Zapian(Schema):
         xap_doc = self._get_document(uid, part)
         return pickle.loads( xap_doc.get_data() )
 
-    def _get_document(self, uid, part=None):
+    def _get_document(self, uid, part=None, db=None):
         """Get the xapian document object with the specified unique ID.
 
         Raises a KeyError if there is no such document.  Otherwise, it returns
         a ProcessedDocument.
 
         """
-        db = _get_read_db(self.db_path, part or self.parts)
+        if db is None:
+            db = _get_read_db(self.db_path, part or self.parts)
+
         while True:
             try:
                 postlist = db.postlist('Q' + uid)
@@ -229,79 +234,26 @@ class Zapian(Schema):
                 return db.get_document(plitem.docid)
 
             except xapian.DatabaseModifiedError:
-                db.reopen()
+                reopen(db)
 
-    def commit(self, part_name):
+    def commit(self, part_name=None):
         """ commit xapian database """
-        db = _get_write_db(self.db_path, part_name)
-        db.commit()
-
-    def _get_xapian_query(self, querys, database=None, db_path=None, parts=None):
-        """ convert to xapian query 
-        """
-        if database is None:
-            database = _get_read_db(db_path, parts=parts or self.parts)
-
-        qp = xapian.QueryParser()
-        qp.set_database(database)
-        qp.set_default_op(xapian.Query.OP_AND)
-
-        # parse filters
-        if not querys:
-            return xapian.Query('')
-
-        queries = []
-        for filters in querys:
-            field, value, op = filters
-            if op == 'parse':
-                _queries = []
-                for f in field:
-                    prefix = self.get_prefix(f, auto_add=False)
-                    # 搜索支持部分匹配
-                    new_value = clean_value(value)
-                    _queries.append( qp.parse_query(new_value, xapian.QueryParser.FLAG_WILDCARD, prefix) )
-
-                query = xapian.Query(xapian.Query.OP_OR, _queries)
-
-                queries.append(query)
-                continue
-
-            if not value:
-                continue
-
-            if op == 'allof':
-                query = self.query_field(field, value)
-                queries.append(query)
-
-            elif op == 'anyof':
-                query = self.query_field(field, value, default_op=xapian.Query.OP_OR)
-                queries.append(query)
-
-            elif op == 'range':
-                begin, end = value[:2]
-                query = self.query_range(field, begin, end)
-                queries.append(query)
-
-            elif not op:
-                query = self.query_field(field, value)
-                queries.append(query)
-
-        if len(queries) == 1:
-            combined = queries[0]
+        if part_name is None:
+            for part_name in self.parts:
+                db = _get_write_db(self.db_path, part_name)
+                db.commit()
         else:
-            _func = lambda q1, q2: query_filter(q1, q2)
-            combined = reduce( _func, queries)
+            db = _get_write_db(self.db_path, part_name)
+            db.commit()
 
-        return combined
-
-    def search(self, parts=None, query=None, orderby=None, start=None, stop=None):
+    def search(self, parts=None, query=None, query_obj=None, orderby=None, start=None, stop=None):
         """ 搜索, 返回document id的集合 
 
         如果parts为空，会对此catalog的所有索引进行搜索。
-        如果query为空，默认返回全部结果
+
         """
         # 这个目录不一个正确的数据库，可能还没有保存至少一条数据
-        if 'schema.yaml' not in os.listdir(self.db_path):
+        if CONFIG_FILE not in os.listdir(self.db_path):
             return []
 
         if parts is None:
@@ -316,7 +268,14 @@ class Zapian(Schema):
             return []
 
         database = _get_read_db(self.db_path, parts=parts)
-        xapian_query = self._get_xapian_query(query, database=database)
+
+        if query_obj is not None:
+            xapian_query = query_obj.build_query(database=database)
+        else:
+            query_obj = Query(self.schema)
+            query_obj._filters = query
+            xapian_query = query_obj.build_query(database=database)
+
         enquire = xapian.Enquire(database)
         enquire.set_query(xapian_query)
         
@@ -329,7 +288,7 @@ class Zapian(Schema):
             elif orderby[0] == '+':
                 orderby = orderby[1:]
 
-            slotnum = self.get_slot(orderby, auto_add=False)
+            slotnum = self.schema.get_slot(orderby, auto_add=False)
             if slotnum is None:
                 raise Exception("Field %r was not indexed for sorting" % orderby)
 
@@ -349,7 +308,7 @@ class Zapian(Schema):
                 matches = enquire.get_mset(start, stop)
                 break
             except xapian.DatabaseModifiedError:
-                database.reopen()
+                reopen(database)
 
         # 返回结果的ID集
         def _get_docid(match):
@@ -363,60 +322,6 @@ class Zapian(Schema):
             return term[1:]
 
         return map(_get_docid, matches)
-
-    def query_field(self, field, value, default_op=xapian.Query.OP_AND):
-        """ """ 
-        #try:
-        #    types = catalog.fields[field]['type']
-        #except KeyError:
-        #    types = catalog.attributes[field]['type']
-
-        #if types == 'exact':
-        #    prefix = catalog.fields[field]['prefix']
-        #    if len(value) > 0:
-        #        chval = ord(value[0])
-        #        if chval >= ord('A') and chval <= ord('Z'):
-        #            prefix = prefix + ':'
-        #    return xapian.Query(prefix + value)
-
-        #if types == 'freetext':
-        #    qp = xapian.QueryParser()
-        #    qp.set_default_op(default_op)
-        #    prefix = self.get_prefix(field)
-        #    return _query_parse_with_fallback(qp, value, prefix)
-
-        #return xapian.Query()
-
-        # FIXME
-        prefix = self.get_prefix(field, auto_add=False)
-
-        if not prefix:
-            return xapian.Query()
-        else:
-            qp = xapian.QueryParser()
-            qp.set_default_op(default_op)
-            return _query_parse_with_fallback(qp, value, prefix)
-
-    def query_range(self, field, begin, end):
-        """ """
-        if begin is None and end is None:
-            # Return a "match everything" query
-            return xapian.Query('')
-
-        slot = self.get_slot(field, auto_add=False)
-        if slot is None:
-            # Return a "match nothing" query
-            return xapian.Query()
-
-        begin, end = normalize_range(begin, end)
-
-        if begin is None:
-            return xapian.Query(xapian.Query.OP_VALUE_LE, slot, end)
-
-        if end is None:
-            return xapian.Query(xapian.Query.OP_VALUE_GE, slot, begin)
-
-        return xapian.Query(xapian.Query.OP_VALUE_RANGE, slot, begin, end)
 
 _write_database_index = {}
 def _get_write_db(db_path, part_name, protocol=''):
@@ -476,7 +381,7 @@ def _get_read_db(db_path, parts, protocol=''):
     opened = thread_context.opened.get(prefix, 0)
 
     if opened < thread_context.modified[prefix]:
-        conn.reopen()
+        reopen(conn)
         thread_context.opened[prefix] = now
 
     return conn
@@ -491,68 +396,6 @@ def _release_read_db(db_path, parts, protocol=''):
     thread_context.connection[prefix].close()
     del thread_context.connection[prefix]
 
-def _query_parse_with_prefix(qp, string, flags, prefix):
-    """ """
-    if prefix is None:
-        return qp.parse_query(string, flags)
-    else:
-        return qp.parse_query(string, flags, prefix)
-
-def _query_parse_with_fallback(qp, string, prefix=None):
-    """ """
-    try:
-        q1 = _query_parse_with_prefix(qp, string,
-                                       _qp_flags_base |
-                                       _qp_flags_phrase |
-                                       _qp_flags_synonym |
-                                       _qp_flags_bool,
-                                       prefix)
-    except xapian.QueryParserError:
-        # If we got a parse error, retry without boolean operators (since
-        # these are the usual cause of the parse error).
-        q1 = _query_parse_with_prefix(qp, string,
-                                           _qp_flags_base |
-                                           _qp_flags_phrase |
-                                           _qp_flags_synonym,
-                                           prefix)
-
-    qp.set_stemming_strategy(qp.STEM_NONE)
-    try:
-        q2 = _query_parse_with_prefix(qp, string,
-                                           _qp_flags_base |
-                                           _qp_flags_bool,
-                                           prefix)
-    except xapian.QueryParserError:
-        # If we got a parse error, retry without boolean operators (since
-        # these are the usual cause of the parse error).
-        q2 = _query_parse_with_prefix(qp, string,
-                                           _qp_flags_base,
-                                           prefix)
-
-    return xapian.Query(xapian.Query.OP_AND_MAYBE, q1, q2)
-
-def query_filter(query, filter, exclude=False):
-    """ """
-    if not isinstance(filter, xapian.Query):
-        raise Exception("filter must be a xapian query object")
-    if exclude:
-        return xapian.Query(xapian.Query.OP_AND_NOT, query, filter)
-    else:
-        return xapian.Query(xapian.Query.OP_FILTER, query, filter)
-
-def normalize_range(begin, end):
-    """ 查询时，转换range 参数，主要是把 float/int 转换为 str 格式 """
-
-    if begin is not None:
-        if isinstance(begin, float):
-            begin = xapian.sortable_serialise(float(begin))
-        else:
-            begin = str(begin)
-
-    if end is not None:
-        if isinstance(end, float):
-            end = xapian.sortable_serialise(float(end))
-        else:
-            end = str(end)
-    return begin, end
-
+def reopen(db):
+    db.reopen()
+    gc.collect()
