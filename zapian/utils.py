@@ -18,6 +18,8 @@ def clean_value(value, is_query=False):
         return clean_splitter(value, is_query=is_query)
     elif isinstance(value, DATE_TYPES):
         return clean_date(value)
+    elif value is None:
+        return 'None'
     else:
         raise TypeError('%s is not supported type.' % value)
 
