@@ -7,7 +7,7 @@ from cjksplitter import CJKSplitter
 
 LIST_TYPES = (set, list, tuple)
 STRING_TYPES = (str, unicode)
-DATE_TYPES = (datetime, int, float)
+DATE_TYPES = (datetime, int, float, long)
 
 def clean_value(value, is_query=False):
     """ convert value 
@@ -21,7 +21,7 @@ def clean_value(value, is_query=False):
     elif value is None:
         return 'None'
     else:
-        raise TypeError('%s is not supported type.' % value)
+        raise TypeError('%s object is not supported type. value is %s .' % (type(value), str(value))  )
 
 def datetimeNorm(value, is_query=False):
     if isinstance(value, datetime):

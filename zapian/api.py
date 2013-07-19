@@ -138,7 +138,7 @@ class Zapian(object):
 
             for value in old_doc.values():
                 if value.num not in values:
-                    _add_value(document, value.num, value)
+                    _add_value(document, value.num, value.value)
 
             if data is None: 
                 data = dict()

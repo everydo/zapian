@@ -7,7 +7,7 @@ def read(*rnames):
 
 setup (
     name='zapian',
-    version='0.3.2dev',
+    version='0.3.3dev',
     author = "Pan Junyong",
     author_email = "dev@zopen.cn",
     description = "indexer addons: sort, cjksplitter, and so on",
@@ -23,10 +23,10 @@ setup (
         'Operating System :: OS Independent',
         'Topic :: Internet :: WWW/HTTP',
         'Framework :: Zope3'],
-    url = 'http://epk.zopen.cn/pypi/zapian',
-    packages = find_packages(),
+    url = 'http://github.com/everydo/zapian',
     include_package_data = True,
-    namespace_packages= [],
+    namespace_packages=[],
+    packages = find_packages(),
     scripts=['scripts/list_xapian_database.py'],
     install_requires = [
         'setuptools',

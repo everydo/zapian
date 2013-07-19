@@ -52,8 +52,8 @@ def print_fields(database):
 
     conn = xappy.IndexerConnection(database)
     fields = conn.get_fields_with_actions()
-    for field in fields:
-        print field
+    for field, value in fields:
+        print field, value
 
     print "--"*15
 

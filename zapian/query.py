@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*- 
 
 import xapian
-from utils import clean_value
+from utils import clean_value, clean_date
 
 _qp_flags_base = xapian.QueryParser.FLAG_LOVEHATE
 _qp_flags_phrase = xapian.QueryParser.FLAG_PHRASE
@@ -71,12 +71,15 @@ class Query(object):
             - allof
             - anyof
         """
-        value = clean_value(value)
+        if self.schema.get_prefix(key, auto_add=False):
+            new_value = clean_value(value)
+        else:
+            new_value = clean_date(value)
 
         if exclude:
-            self._exclude.append((key, value, op))
+            self._exclude.append((key, new_value, op))
         else:
-            self._filters.append((key, value, op))
+            self._filters.append((key, new_value, op))
 
         return self
 
@@ -111,6 +114,8 @@ class Query(object):
                 continue
 
             prefix = self.schema.get_prefix(field, auto_add=False)
+            if not prefix:
+                prefix = self.schema.get_slot(field, auto_add=False)
 
             if op == 'allof':
                 query = query_field(prefix, value)
@@ -140,13 +145,12 @@ class Query(object):
 
         return combined
 
-    def query_range(self, field, begin, end):
+    def query_range(self, slot, begin, end):
         """ """
         if begin is None and end is None:
             # Return a "match everything" query
             return xapian.Query('')
 
-        slot = self.schema.get_slot(field, auto_add=False)
         if slot is None:
             # Return a "match nothing" query
             return xapian.Query()
@@ -188,7 +192,7 @@ class Query(object):
         # 先对自己build query
         combined = source._get_xapian_query(source._filters, database=database)
         # 添加exclude的查询条件
-        if self._exclude:
+        if source._exclude:
             exclude_query = source._get_xapian_query(source._exclude, True, database=database)
             if exclude_query:
                 combined = query_filter(combined, exclude_query, exclude=True)
