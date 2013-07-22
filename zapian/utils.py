@@ -50,7 +50,7 @@ def clean_date(value):
     if value in ['', u'', None]: return None
     return datetimeNorm(value)
 
-CLEAN_LIST_RE = re.compile(r'[\s,@-]')
+CLEAN_LIST_RE = re.compile(r'[\s.@-]')
 def clean_list(value):
     """ 将一个包含字符串的list 转换为字符串，字符串中的“.”"@"和空格将被转换为_"""
     if type(value) not in STRING_TYPES:
