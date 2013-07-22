@@ -57,8 +57,7 @@ class Query(object):
             - fields 允许搜索的字段，为None则搜索全部字段
         """
         # 搜索支持部分匹配
-        new_text = clean_value(text, is_query=True)
-        self._filters.append((fields, new_text, 'parse'))
+        self._filters.append((fields, text, 'parse'))
         return self
 
     def filter(self, key, value, op, exclude=False):
@@ -71,15 +70,10 @@ class Query(object):
             - allof
             - anyof
         """
-        if self.schema.get_prefix(key, auto_add=False):
-            new_value = clean_value(value)
-        else:
-            new_value = clean_date(value)
-
         if exclude:
-            self._exclude.append((key, new_value, op))
+            self._exclude.append((key, value, op))
         else:
-            self._filters.append((key, new_value, op))
+            self._filters.append((key, value, op))
 
         return self
 
@@ -101,6 +95,7 @@ class Query(object):
             field, value, op = filters
             if op == 'parse':
                 _queries = []
+                value = clean_value(value, is_query=True)
                 for f in field:
                     prefix = self.schema.get_prefix(f, auto_add=False)
                     _queries.append( qp.parse_query(value, xapian.QueryParser.FLAG_WILDCARD, prefix) )
@@ -113,24 +108,28 @@ class Query(object):
             if not value:
                 continue
 
-            prefix = self.schema.get_prefix(field, auto_add=False)
-            if not prefix:
-                prefix = self.schema.get_slot(field, auto_add=False)
-
             if op == 'allof':
+                prefix = self.schema.get_prefix(field, auto_add=False)
+                value = clean_value(value)
                 query = query_field(prefix, value)
                 queries.append(query)
 
             elif op == 'anyof':
+                prefix = self.schema.get_prefix(field, auto_add=False)
+                value = clean_value(value)
                 query = query_field(prefix, value, default_op=xapian.Query.OP_OR)
                 queries.append(query)
 
             elif op == 'range':
+                prefix = self.schema.get_slot(field, auto_add=False)
+                value = clean_date(value)
                 begin, end = value[:2]
                 query = self.query_range(prefix, begin, end)
                 queries.append(query)
 
             elif not op:
+                prefix = self.schema.get_prefix(field, auto_add=False)
+                value = clean_value(value)
                 query = query_field(prefix, value)
                 queries.append(query)
 
