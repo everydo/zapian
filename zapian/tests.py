@@ -34,7 +34,7 @@ class ZapianTest(unittest.TestCase):
             self.zapian.add_part(part_name)
 
         # init the test data
-        self.doc = {'title':'we are firend', 
+        self.doc = {'+title':'we are firend', 
                     'subjects':['file','ktv','what@gmail.com'], 
                     'created':datetime(2000, 1, 1)}
 
@@ -71,9 +71,8 @@ class ZapianTest(unittest.TestCase):
                 flush=True)
         # test value of the new document
         doc = self.zapian._get_document(uid, [part])
-        for value in doc.values():
-            if value.num == 0:
-                self.assertEqual(value.value, '946656000')
+        values = [v.value for v in doc.values()]
+        self.assertEqual(set(values), set(['946656000', 'we are firend']))
         # test term of the new document
         title_prefix = self.zapian.schema.get_prefix('title', auto_add=False)
         subjects_prefix = self.zapian.schema.get_prefix('subjects', auto_add=False)
@@ -81,12 +80,11 @@ class ZapianTest(unittest.TestCase):
                             title_prefix + 'are', 
                             title_prefix + 'firend', 
                             title_prefix + 'we',
-                            subjects_prefix + 'com', 
                             subjects_prefix + 'file', 
                             subjects_prefix + 'ktv', 
-                            subjects_prefix + 'what_gmail', ]
+                            subjects_prefix + 'what_gmail_com', ]
         old_terms = [ term.term for term in doc.termlist() ]
-        self.assertTrue(len(validate_terms) == len(old_terms))
+        self.assertEqual(len(validate_terms), len(old_terms))
         self.assertEqual(set(validate_terms), set(old_terms))
         # test data of the new document
         data = pickle.loads( doc.get_data() )['data']
@@ -100,24 +98,22 @@ class ZapianTest(unittest.TestCase):
                 index=self.doc, data={'data': "测试内容"},
                 flush=True)
         new_doc = self.doc.copy()
-        new_doc['title'] = "new title"
+        new_doc['+title'] = "new title"
 
         self.zapian.update_document(part, uid=uid, index=new_doc, flush=True)
         # test value of the new document
         doc = self.zapian._get_document(uid, [part])
-        for value in doc.values():
-            if value.num == 0:
-                self.assertEqual(value.value, '946656000')
+        values = [v.value for v in doc.values()]
+        self.assertEqual(set(values), set(['946656000', 'new title']))
         # test term of the new document
         title_prefix = self.zapian.schema.get_prefix('title', auto_add=False)
         subjects_prefix = self.zapian.schema.get_prefix('subjects', auto_add=False)
         validate_terms = ['Q'+uid,
                             title_prefix + 'new', 
                             title_prefix + 'title', 
-                            subjects_prefix + 'com', 
                             subjects_prefix + 'file', 
                             subjects_prefix + 'ktv', 
-                            subjects_prefix + 'what_gmail', ]
+                            subjects_prefix + 'what_gmail_com', ]
         old_terms = [term.term for term in doc.termlist()]
         self.assertTrue(len(validate_terms) == len(old_terms))
         self.assertEqual(set(validate_terms), set(old_terms))
@@ -133,16 +129,15 @@ class ZapianTest(unittest.TestCase):
                 index=self.doc, data={'data': "测试内容"},
                 flush=True)
         new_doc = self.doc.copy()
-        new_doc['title'] = "new title"
+        new_doc['+title'] = "new title"
         self.zapian.schema.add_field('new-field')
         new_doc['new-field'] = 'last'
 
         self.zapian.replace_document(part, uid=uid, index=new_doc, flush=True)
         # test value of the new document
         doc = self.zapian._get_document(uid, [part])
-        for value in doc.values():
-            if value.num == 0:
-                self.assertEqual(value.value, '946656000')
+        values = [v.value for v in doc.values()]
+        self.assertEqual(set(values), set(['946656000', 'new title']))
         # test term of the new document
         title_prefix = self.zapian.schema.get_prefix('title', auto_add=False)
         subjects_prefix = self.zapian.schema.get_prefix('subjects', auto_add=False)
@@ -151,10 +146,9 @@ class ZapianTest(unittest.TestCase):
                             new_field_prefix + 'last',
                             title_prefix + 'new', 
                             title_prefix + 'title', 
-                            subjects_prefix + 'com', 
                             subjects_prefix + 'file', 
                             subjects_prefix + 'ktv', 
-                            subjects_prefix + 'what_gmail', ]
+                            subjects_prefix + 'what_gmail_com', ]
         old_terms = [term.term for term in doc.termlist()]
         self.assertTrue(len(validate_terms) == len(old_terms))
         self.assertEqual(set(validate_terms), set(old_terms))
@@ -267,7 +261,7 @@ class ZapianTest(unittest.TestCase):
                 index=self.doc, flush=True)
 
         new_doc = self.doc.copy()
-        new_doc['title'] = 'we talk'
+        new_doc['+title'] = 'we talk'
         self.zapian.add_document(self.parts[0], uid="12346", 
                 index=new_doc, flush=True)
 

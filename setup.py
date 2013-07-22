@@ -7,7 +7,7 @@ def read(*rnames):
 
 setup (
     name='zapian',
-    version='0.3.5dev',
+    version='0.3.6dev',
     author = "Pan Junyong",
     author_email = "dev@zopen.cn",
     description = "indexer addons: sort, cjksplitter, and so on",

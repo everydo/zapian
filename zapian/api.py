@@ -112,8 +112,13 @@ class Zapian(object):
         values = set()
         # build new xapian object
         for field, value in doc.iteritems():
+            both = field.startswith('+') 
+            if both:
+                field = field[1:]
+            is_value = isinstance(value, (int, float, datetime))
+            is_term = not is_value
             # sortable
-            if isinstance(value, (int, float, datetime)):
+            if both or is_value:
                 if field in values:
                     continue
                 slotnum = self.schema.get_slot(field)
@@ -121,7 +126,7 @@ class Zapian(object):
                 _add_value(document, slotnum, value)
                 values.add(slotnum)
             # field
-            else:
+            if both or is_term:
                 if field in terms:
                     continue
                 prefix = self.schema.get_prefix(field)
