@@ -294,14 +294,13 @@ class Zapian(object):
                 orderby = orderby[1:]
 
             slotnum = self.schema.get_slot(orderby, auto_add=False)
-            if slotnum is None:
-                raise Exception("Field %r was not indexed for sorting" % orderby)
-
-            # Note: we invert the "asc" parameter, because xapian treats
-            # "ascending" as meaning "higher values are better"; in other
-            # words, it considers "ascending" to mean return results in
-            # descending order.
-            enquire.set_sort_by_value_then_relevance(slotnum, not asc)
+            # sort when available
+            if slotnum is not None:
+                # Note: we invert the "asc" parameter, because xapian treats
+                # "ascending" as meaning "higher values are better"; in other
+                # words, it considers "ascending" to mean return results in
+                # descending order.
+                enquire.set_sort_by_value_then_relevance(slotnum, not asc)
 
         enquire.set_docid_order(enquire.DONT_CARE)
 
