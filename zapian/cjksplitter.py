@@ -46,6 +46,7 @@ def getSupportedEncoding(encodings):
 
 # CJK charsets ranges, see this following pages:
 #
+# http://zh.wikipedia.org/wiki/Unicode%E5%AD%97%E7%AC%A6%E5%B9%B3%E9%9D%A2%E6%98%A0%E5%B0%84
 # http://jrgraphix.net/research/unicode_blocks.php?block=87
 # http://jrgraphix.net/research/unicode_blocks.php?block=85
 # http://jrgraphix.net/research/unicode_blocks.php?block=95
@@ -68,8 +69,8 @@ for char_ord in range(ord(u'ａ'), ord(u'ｚ')+1):
 for char_ord in range(ord(u'０'), ord(u'９')+1):
     norm_table[unichr(char_ord)] = unichr(ord('0') + char_ord - ord(u'０'))
 
-rxNormal = re.compile(u"[a-zA-Z0-9_\u0392-\u03c9]+|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af]+", re.UNICODE)
-rxGlob = re.compile(u"[a-zA-Z0-9_\u0392-\u03c9]+[*?]*|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af]+[*?]*", re.UNICODE)
+rxNormal = re.compile(u"[a-zA-Z0-9_\u0392-\u03c9]+|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af\u0400-\u052f]+", re.UNICODE)
+rxGlob = re.compile(u"[a-zA-Z0-9_\u0392-\u03c9]+[*?]*|[\u4E00-\u9FFF\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af\u0400-\u052f]+[*?]*", re.UNICODE)
 
 class CJKSplitter(object):
 

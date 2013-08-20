@@ -9,6 +9,7 @@ _qp_flags_synonym = (xapian.QueryParser.FLAG_AUTO_SYNONYMS |
                      xapian.QueryParser.FLAG_AUTO_MULTIWORD_SYNONYMS)
 _qp_flags_bool = xapian.QueryParser.FLAG_BOOLEAN
 
+
 class Query(object):
 
     """ query class """
