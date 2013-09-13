@@ -31,7 +31,6 @@ class ZapianTest(unittest.TestCase):
             database_path = os.path.join(self.data_root, part_name)
             if not os.path.isdir(database_path):
                 os.makedirs(database_path)
-            self.zapian.add_part(part_name)
 
         # init the test data
         self.doc = {'+title':'we are firend', 

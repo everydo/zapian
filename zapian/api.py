@@ -14,26 +14,20 @@ from datetime import datetime
 
 from query import Query
 from utils import clean_value
-from schema import Schema, CONFIG_FILE
+from schema import Schema
 
 class Zapian(object):
 
     def __init__(self, db_path):
         self.db_path = db_path
-        self.parts = [] 
-        for part_name in os.listdir(self.db_path):
-            self.add_part(part_name)
-
         self.schema = Schema(db_path)
 
-    def add_part(self, part_name):
-        """ add xapian a database """
-        if part_name in self.parts:
-            return 
-
-        part_path = os.path.join(self.db_path, part_name)
-        if os.path.isdir(part_path):
-            self.parts.append(part_name)
+    @property
+    def parts(self):
+        """ show parts of the database """
+        for sub in os.listdir(self.db_path):
+            if os.path.isdir(os.path.join(self.db_path, sub)):
+                yield sub
 
     def release_part(self, part_name):
         """ release xapian a database """
@@ -218,7 +212,10 @@ class Zapian(object):
 
         """
         if db is None:
-            db = _get_read_db(self.db_path, part or self.parts)
+            if part is None:
+                raise Exception('_get_document method need the part or the db')
+            else:
+                db = _get_read_db(self.db_path, part)
 
         while True:
             try:
@@ -241,13 +238,12 @@ class Zapian(object):
             except xapian.DatabaseModifiedError:
                 reopen(db)
 
-    def commit(self, part_name=None):
+    def commit(self, parts=None):
         """ commit xapian database """
-        if part_name is None:
-            for part_name in self.parts:
-                db = _get_write_db(self.db_path, part_name)
-                db.commit()
-        else:
+        if parts is None:
+            parts = ['default']
+
+        for part_name in parts:
             db = _get_write_db(self.db_path, part_name)
             db.commit()
 
@@ -258,16 +254,10 @@ class Zapian(object):
 
         """
         # 这个目录不一个正确的数据库，可能还没有保存至少一条数据
-        if CONFIG_FILE not in os.listdir(self.db_path):
-            return []
-
+        #if CONFIG_FILE not in os.listdir(self.db_path):
+        #    return []
         if parts is None:
-            parts = self.parts
-
-        else:
-            for part_name in parts:
-                if not os.path.exists(os.path.join(self.db_path, part_name)):
-                    parts.remove(part_name)
+            parts = ['default']
 
         if not parts:
             return []
@@ -372,13 +362,19 @@ def _get_read_db(db_path, parts, protocol=''):
         thread_context.modified[prefix] = now
     
     if conn is None:
-        base_name = os.path.join(db_path, parts[0])
-        conn = xapian.Database(base_name)
-
         # 适用于多个数据库查询
-        for part_name in parts[1:]:
-            other_name = os.path.join(db_path, part_name)
-            conn.add_database(xapian.Database(other_name))
+        for path_name in parts:
+            path = os.path.join(db_path, path_name)
+            try:
+                db = xapian.Database(path)
+            except xapian.DatabaseOpeningError:
+                continue
+
+            if conn is None:
+                conn = db
+            else:
+                conn.add_database(db)
+
         thread_context.connection[prefix] = conn 
         thread_context.opened[prefix] = now
             
