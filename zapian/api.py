@@ -38,8 +38,9 @@ class Zapian(object):
         part_path = os.path.join(self.db_path, part_name)
         if os.path.isdir(part_path):
             part = _write_database_index.pop(part_path, None)
-            part.close()
-            shutil.rmtree(part_path)
+            if part is not None:
+                part.close()
+                shutil.rmtree(part_path)
         else:
             raise Exception('remove database: %s is not xapian database'%part_path)
 
