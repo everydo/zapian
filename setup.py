@@ -27,7 +27,6 @@ setup (
     include_package_data = True,
     namespace_packages=[],
     packages = find_packages(),
-    scripts=['scripts/list_xapian_database.py'],
     install_requires = [
         'setuptools',
         'PyYAML'
