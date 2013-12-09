@@ -201,7 +201,7 @@ class Query(object):
         while other is not None:
             combined2 = other._get_xapian_query(other._filters, database=database)
             # 添加exclude的查询条件
-            if self._exclude:
+            if other._exclude:
                 exclude_query = other._get_xapian_query(other._exclude, True, database=database)
                 if exclude_query:
                     combined2 = query_filter(combined2, exclude_query, exclude=True)

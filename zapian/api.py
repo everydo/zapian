@@ -40,6 +40,8 @@ class Zapian(object):
             part = _write_database_index.pop(part_path, None)
             if part is not None:
                 part.close()
+                _release_write_db(self.db_path, part_name)
+                _release_all_read_db()
                 shutil.rmtree(part_path)
         else:
             raise Exception('remove database: %s is not xapian database'%part_path)
@@ -387,15 +389,16 @@ def _get_read_db(db_path, parts, protocol=''):
 
     return conn
 
-def _release_read_db(db_path, parts, protocol=''):
-    """ release the read db 
-        protocol: the future maybe support.
+def _release_all_read_db(protocol=''):
+    """ protocol: the future maybe support.
+
+        tips: I don't know a better way to released specified read db, so i release all read db.
     """
-    prefix = hashlib.md5(db_path + ''.join(parts)).hexdigest()
-    del thread_context.modified[prefix]
-    del thread_context.opened[prefix]
-    thread_context.connection[prefix].close()
-    del thread_context.connection[prefix]
+    thread_context.opened.clear()
+    thread_context.modified.clear()
+    for connection in thread_context.connection.values():
+        connection.close()
+    thread_context.connection.clear()
 
 def reopen(db):
     db.reopen()
